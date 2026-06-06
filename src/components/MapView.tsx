@@ -208,7 +208,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
       },
       center: [-73.95, 40.65],
       zoom: 10,
-      attributionControl: true,
+      attributionControl: { compact: false },
       preserveDrawingBuffer: true, // needed for canvas.toDataURL() export
     });
 

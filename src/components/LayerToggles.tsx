@@ -216,9 +216,6 @@ export function LayerToggles({ map }: LayerTogglesProps) {
     setVisibility((prev) => {
       const next = { ...prev, [childKey]: newVisible };
       if (group.children) {
-        const allChildrenOff = Object.keys(group.children).every(
-          (k) => !(k === childKey ? newVisible : next[k] ?? prev[k])
-        );
         const anyChildOn = Object.keys(group.children).some(
           (k) => (k === childKey ? newVisible : next[k] ?? prev[k])
         );
