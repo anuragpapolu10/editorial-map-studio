@@ -92,6 +92,10 @@ const LAYER_GROUPS: Record<string, LayerGroup> = {
         label: 'States / Provinces',
         ids: ['places_region'],
       },
+      labels_islands: {
+        label: 'Islands',
+        ids: ['earth_label_islands'],
+      },
       labels_country: {
         label: 'Countries',
         ids: ['places_country'],
