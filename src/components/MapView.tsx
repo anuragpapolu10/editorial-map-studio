@@ -155,7 +155,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
             type: 'vector',
             tiles: ['https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=0a52651ea40e292b'],
             maxzoom: 15,
-            attribution: '<a href="https://protomaps.com">Protomaps</a> | <a href="https://openstreetmap.org">OSM</a>',
+            attribution: '<a href="https://editorialmapstudio.com">Editorial Map Studio</a> | <a href="https://protomaps.com">Protomaps</a> | <a href="https://openstreetmap.org">OSM</a>',
           },
           terrain: {
             type: 'raster-dem',

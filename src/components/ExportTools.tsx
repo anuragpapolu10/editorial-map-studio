@@ -28,7 +28,7 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   document.body.removeChild(a);
 }
 
-const ATTRIBUTION = 'Esri, Maxar, Earthstar Geographics | Protomaps | OpenStreetMap';
+const ATTRIBUTION = 'Editorial Map Studio | Esri, Maxar, Earthstar Geographics | Protomaps | OpenStreetMap';
 
 /**
  * Draw attribution text (bottom-right) onto a canvas context.
