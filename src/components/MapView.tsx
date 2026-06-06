@@ -8,21 +8,13 @@ import { createMarkerIcons } from '../markers';
 import { computeScaleBar } from '../scalebar';
 import type { ScaleBarInfo } from '../scalebar';
 
-import type { OverlaySettings, AspectRatio } from '../App';
+import type { OverlaySettings } from '../App';
 import type { LegendEntry } from '../legend';
-
-const RATIO_VALUES: Record<string, number> = {
-  '3:2': 3 / 2,
-  '1:1': 1,
-  '3:4': 3 / 4,
-  '9:16': 9 / 16,
-};
 
 interface MapViewProps {
   onMapReady?: (map: maplibregl.Map) => void;
   overlay?: OverlaySettings | null;
   legendEntries?: LegendEntry[];
-  aspectRatio?: AspectRatio;
 }
 
 class GlobeControl implements maplibregl.IControl {
@@ -124,7 +116,7 @@ export const ARROW_SHAFT_LAYER_IDS = [
 export const ARROW_CP_HANDLE_LAYER_ID = 'arrows-cp-handles';
 export const SHAPE_HANDLE_LAYER_ID = 'shape-handles';
 
-export function MapView({ onMapReady, overlay, legendEntries = [], aspectRatio }: MapViewProps) {
+export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [coords, setCoords] = useState({ lng: 0, lat: 0 });
@@ -145,41 +137,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [], aspectRatio }
       m.off('moveend', update);
       m.off('zoomend', update);
     };
-  }, [overlay?.scaleUnit]);
-
-  // Compute frame dimensions when aspect ratio or container size changes
-  const outerRef = useRef<HTMLDivElement>(null);
-  const [frameStyle, setFrameStyle] = useState<React.CSSProperties>({ width: '100%', height: '100%' });
-
-  useEffect(() => {
-    const outer = outerRef.current;
-    if (!outer) return;
-
-    const compute = () => {
-      if (!aspectRatio) {
-        setFrameStyle({ width: '100%', height: '100%' });
-      } else {
-        const ratio = RATIO_VALUES[aspectRatio];
-        const cw = outer.clientWidth;
-        const ch = outer.clientHeight;
-        // Fit the aspect ratio within the container
-        let w = cw;
-        let h = cw / ratio;
-        if (h > ch) {
-          h = ch;
-          w = ch * ratio;
-        }
-        setFrameStyle({ width: w, height: h });
-      }
-      // Tell MapLibre to resize after DOM update
-      setTimeout(() => mapRef.current?.resize(), 20);
-    };
-
-    compute();
-    const observer = new ResizeObserver(compute);
-    observer.observe(outer);
-    return () => observer.disconnect();
-  }, [aspectRatio]);
+  }, [overlay?.scaleUnit, overlay?.showScaleBar]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -702,11 +660,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [], aspectRatio }
   const showTitle = overlay && (overlay.title || overlay.subtitle);
 
   return (
-    <div ref={outerRef} className={`map-container${aspectRatio ? ' map-container-framed' : ''}`}>
-      <div
-        className={aspectRatio ? 'map-frame' : undefined}
-        style={frameStyle}
-      >
+    <div className="map-container">
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       {showTitle && (
         <div
@@ -792,7 +746,6 @@ export function MapView({ onMapReady, overlay, legendEntries = [], aspectRatio }
       <div className="coords-display">
         {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
       </div>
-      </div>{/* close map-frame or full-size wrapper */}
     </div>
   );
 }
