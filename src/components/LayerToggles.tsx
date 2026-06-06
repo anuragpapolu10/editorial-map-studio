@@ -120,7 +120,7 @@ function getAllIds(group: LayerGroup): string[] {
 
 export function LayerToggles({ map }: LayerTogglesProps) {
   const [satelliteOn, setSatelliteOn] = useState(false);
-  const [satelliteOpacity, setSatelliteOpacity] = useState(0.7);
+  const [satelliteOpacity, setSatelliteOpacity] = useState(0.2);
 
   const [visibility, setVisibility] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
