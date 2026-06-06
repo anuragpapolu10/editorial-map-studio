@@ -303,6 +303,60 @@ function drawScaleBar(
   ctx.textBaseline = 'alphabetic';
 }
 
+function drawCompass(
+  ctx: CanvasRenderingContext2D,
+  canvasW: number,
+  bearing: number,
+) {
+  const size = 40;
+  const pad = 16;
+  const cx = canvasW - pad - size / 2;
+  const cy = pad + size / 2;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate((-bearing * Math.PI) / 180);
+
+  // North pointer (dark)
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.moveTo(0, -size * 0.4);
+  ctx.lineTo(size * 0.1, -size * 0.05);
+  ctx.lineTo(0, -size * 0.1);
+  ctx.lineTo(-size * 0.1, -size * 0.05);
+  ctx.closePath();
+  ctx.fill();
+
+  // South pointer (light)
+  ctx.fillStyle = '#bbbbbb';
+  ctx.beginPath();
+  ctx.moveTo(0, size * 0.4);
+  ctx.lineTo(size * 0.1, size * 0.05);
+  ctx.lineTo(0, size * 0.1);
+  ctx.lineTo(-size * 0.1, size * 0.05);
+  ctx.closePath();
+  ctx.fill();
+
+  // Center dot
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(0, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // N label
+  ctx.font = "700 11px 'Playfair Display', Georgia, serif";
+  ctx.fillStyle = '#1a1a1a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.strokeText('N', 0, -size * 0.4 - 3);
+  ctx.fillText('N', 0, -size * 0.4 - 3);
+
+  ctx.restore();
+}
+
 /**
  * Composite scale bar onto an image data URL.
  */
@@ -676,6 +730,27 @@ function buildSvgExport(
     svgParts.push('  </g>');
   }
 
+  // --- Compass ---
+  if (overlay.showCompass) {
+    const bearing = map.getBearing();
+    const compassSize = 40 * dpr;
+    const cPad = 16 * dpr;
+    const cx = w - cPad - compassSize / 2;
+    const cy = cPad + compassSize / 2;
+    const labelSize = 11 * dpr;
+
+    svgParts.push(`  <g id="compass" transform="rotate(${-bearing}, ${cx}, ${cy})">`);
+    // North pointer (dark)
+    svgParts.push(`    <polygon points="${cx},${cy - compassSize * 0.4} ${cx + compassSize * 0.1},${cy - compassSize * 0.05} ${cx},${cy - compassSize * 0.1} ${cx - compassSize * 0.1},${cy - compassSize * 0.05}" fill="#1a1a1a" />`);
+    // South pointer (light)
+    svgParts.push(`    <polygon points="${cx},${cy + compassSize * 0.4} ${cx + compassSize * 0.1},${cy + compassSize * 0.05} ${cx},${cy + compassSize * 0.1} ${cx - compassSize * 0.1},${cy + compassSize * 0.05}" fill="#bbbbbb" />`);
+    // Center dot
+    svgParts.push(`    <circle cx="${cx}" cy="${cy}" r="${2 * dpr}" fill="#1a1a1a" />`);
+    // N label
+    svgParts.push(`    <text x="${cx}" y="${cy - compassSize * 0.4 - 3 * dpr}" font-family="'Playfair Display', Georgia, serif" font-size="${labelSize}" font-weight="700" fill="#1a1a1a" text-anchor="middle" stroke="#ffffff" stroke-opacity="0.85" stroke-width="${3 * dpr}" paint-order="stroke">N</text>`);
+    svgParts.push('  </g>');
+  }
+
   // --- Legend ---
   if (legendEntries.length > 0) {
     const lPad = 12 * dpr;
@@ -794,6 +869,15 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
     dataUrl = await compositeOverlay(dataUrl, overlay, 'image/jpeg', 0.92);
     if (overlay.showScaleBar) {
       dataUrl = await compositeScaleBar(dataUrl, map, overlay.scaleUnit, 'image/jpeg', 0.92);
+    }
+    if (overlay.showCompass) {
+      const img = await loadImage(dataUrl);
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const cx = c.getContext('2d')!;
+      cx.drawImage(img, 0, 0);
+      drawCompass(cx, c.width, map.getBearing());
+      dataUrl = c.toDataURL('image/jpeg', 0.92);
     }
     if (legendEntries.length > 0) {
       const img = await loadImage(dataUrl);
@@ -1229,6 +1313,21 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
             <span style={{ display: 'inline-block', width: 1, height: 14, background: '#d1d1d1', alignSelf: 'center' }} />
           </div>
         )}
+      </div>
+
+      {/* Compass toggle */}
+      <div style={{ marginTop: 6 }}>
+        <label className="layer-toggle">
+          <input
+            type="checkbox"
+            checked={overlay.showCompass}
+            onChange={(e) => updateField('showCompass', e.target.checked)}
+          />
+          <span className="toggle-track">
+            <span className="toggle-thumb" />
+          </span>
+          <span className="toggle-label">Compass</span>
+        </label>
       </div>
 
       <div className="export-btn-row" style={{ marginTop: 18 }}>

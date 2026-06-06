@@ -121,23 +121,27 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [coords, setCoords] = useState({ lng: 0, lat: 0 });
   const [scaleBar, setScaleBar] = useState<ScaleBarInfo | null>(null);
+  const [bearing, setBearing] = useState(0);
 
-  // Re-compute scale bar when unit changes or map moves
+  // Re-compute scale bar and bearing when map moves
   useEffect(() => {
     const m = mapRef.current;
     if (!m) return;
     const update = () => {
       const center = m.getCenter();
       setScaleBar(computeScaleBar(m.getZoom(), center.lat, overlay?.scaleUnit));
+      setBearing(m.getBearing());
     };
     update();
     m.on('moveend', update);
     m.on('zoomend', update);
+    m.on('rotate', update);
     return () => {
       m.off('moveend', update);
       m.off('zoomend', update);
+      m.off('rotate', update);
     };
-  }, [overlay?.scaleUnit, overlay?.showScaleBar]);
+  }, [overlay?.scaleUnit, overlay?.showScaleBar, overlay?.showCompass]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -689,6 +693,16 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
         <div className="scale-bar-preview">
           <div className="scale-bar-line" style={{ width: scaleBar.widthPx }} />
           <div className="scale-bar-label">{scaleBar.label}</div>
+        </div>
+      )}
+      {overlay?.showCompass && (
+        <div className="compass-preview" style={{ transform: `rotate(${-bearing}deg)` }}>
+          <div className="compass-label">N</div>
+          <svg viewBox="0 0 40 40" width="40" height="40">
+            <polygon points="20,4 24,18 20,16 16,18" fill="#1a1a1a" />
+            <polygon points="20,36 24,22 20,24 16,22" fill="#bbb" />
+            <circle cx="20" cy="20" r="2" fill="#1a1a1a" />
+          </svg>
         </div>
       )}
       {legendEntries.length > 0 && (

@@ -83,6 +83,8 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
   const [editText, setEditText] = useState('');
   const draggingRef = useRef(false);
   const dragStartRef = useRef<{ lng: number; lat: number } | null>(null);
+  const altDuplicateRef = useRef(false);
+  const clipboardRef = useRef<TextAnnotation | null>(null);
 
   // Subscribe to store
   useEffect(() => {
@@ -265,7 +267,20 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
       const id = features[0].properties?.id;
       if (!id) return;
 
-      dragId = id;
+      // Alt+drag: duplicate the annotation and drag the copy
+      if (e.originalEvent.altKey) {
+        const orig = store.getAll().find((a) => a.id === id);
+        if (orig) {
+          const dupeId = nextId();
+          const dupe: TextAnnotation = { ...orig, id: dupeId };
+          store.add(dupe);
+          dragId = dupeId;
+          altDuplicateRef.current = true;
+        }
+      } else {
+        dragId = id;
+        altDuplicateRef.current = false;
+      }
       draggingRef.current = false;
       dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
       map.getCanvasContainer().style.cursor = 'grabbing';
@@ -381,6 +396,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
 
   // Keyboard shortcuts: undo/redo + delete
   useEffect(() => {
+    if (!active) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -393,6 +409,17 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
       } else if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
         e.preventDefault();
         store.redo();
+      } else if (mod && e.key === 'c' && selectedId && !editingId) {
+        e.preventDefault();
+        const ann = store.getAll().find((a) => a.id === selectedId);
+        if (ann) clipboardRef.current = { ...ann };
+      } else if (mod && e.key === 'v' && clipboardRef.current && !editingId) {
+        e.preventDefault();
+        const src = clipboardRef.current;
+        const offset = 0.005;
+        const pasted: TextAnnotation = { ...src, id: nextId(), lng: src.lng + offset, lat: src.lat - offset };
+        store.add(pasted);
+        setSelectedId(pasted.id);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !editingId) {
         e.preventDefault();
         store.remove(selectedId);
@@ -409,7 +436,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store, selectedId, editingId]);
+  }, [active, store, selectedId, editingId]);
 
   // Apply style change to selected annotation
   const applyStyle = (changes: Partial<TextAnnotation>) => {
@@ -492,7 +519,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
               </div>
             </div>
           ) : !editingId ? (
-            <div className="hint-bar">Click map to place a label, or click a label to select it</div>
+            <div className="hint-bar">Click map to place a label · Click a label to select · Alt+drag to duplicate · Ctrl+C / Ctrl+V to copy/paste</div>
           ) : null}
 
           {/* Inline text editing */}

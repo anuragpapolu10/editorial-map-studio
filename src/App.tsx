@@ -27,6 +27,7 @@ export interface OverlaySettings {
   align: 'left' | 'center';
   showScaleBar: boolean;
   scaleUnit: ScaleUnit;
+  showCompass: boolean;
 }
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
@@ -37,6 +38,7 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   align: 'left',
   showScaleBar: false,
   scaleUnit: 'metric',
+  showCompass: false,
 };
 
 function App() {

@@ -36,6 +36,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [strokeStyle, setStrokeStyle] = useState<StrokeStyle>('solid');
   const [bidirectional, setBidirectional] = useState(false);
+  const [headScale, setHeadScale] = useState(1);
   const [tooltipMsg, setTooltipMsg] = useState('');
 
   // Interaction refs
@@ -43,7 +44,9 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
   const dragArrowIdRef = useRef<string | null>(null);
   const dragStartRef = useRef<{ lng: number; lat: number } | null>(null);
   const hasDraggedRef = useRef(false);
+  const altDuplicateRef = useRef(false);
   const ptDragRef = useRef<{ id: string; ptIndex: number; origPt: [number, number] } | null>(null);
+  const clipboardRef = useRef<ArrowAnnotation | null>(null);
 
   // Subscribe to store
   useEffect(() => {
@@ -65,16 +68,12 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
   useEffect(() => {
     if (!active) { setTooltipMsg(''); return; }
     if (selectedId) {
-      const arrow = store.getAll().find((a) => a.id === selectedId);
-      const hasBends = arrow && arrow.points.length > 2;
       setTooltipMsg(
-        hasBends
-          ? 'Drag handles to adjust · Click shaft to add point · Delete to remove'
-          : 'Drag handles to adjust · Click shaft to add bend · Delete to remove',
+        'Drag endpoints to reshape · Click shaft to add bend point · Click Done to deselect · Alt+drag to duplicate · Ctrl+C / Ctrl+V to copy/paste · Delete to remove',
       );
       return;
     }
-    setTooltipMsg('Click and drag to draw an arrow · Hold Shift to snap 45°');
+    setTooltipMsg('Click and drag to draw an arrow · Shift to snap 45°');
   }, [active, selectedId, arrows, store]);
 
   /* ---- Sync arrows to map source ---- */
@@ -173,11 +172,26 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
           }
         }
 
-        // Select a different arrow
-        setSelectedId(hitId);
-        const arrow = store.getAll().find((a) => a.id === hitId);
-        if (arrow) loadStyleFromArrow(arrow);
-        dragArrowIdRef.current = hitId;
+        // Alt+drag: duplicate the arrow and drag the copy
+        if (e.originalEvent.altKey) {
+          const orig = store.getAll().find((a) => a.id === hitId);
+          if (orig) {
+            const dupeId = nextId();
+            const dupe: ArrowAnnotation = { ...orig, id: dupeId, points: orig.points.map(p => [...p] as [number, number]) };
+            store.add(dupe);
+            setSelectedId(dupeId);
+            loadStyleFromArrow(dupe);
+            dragArrowIdRef.current = dupeId;
+            altDuplicateRef.current = true;
+          }
+        } else {
+          // Select a different arrow
+          setSelectedId(hitId);
+          const arrow = store.getAll().find((a) => a.id === hitId);
+          if (arrow) loadStyleFromArrow(arrow);
+          dragArrowIdRef.current = hitId;
+          altDuplicateRef.current = false;
+        }
         dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
         hasDraggedRef.current = false;
         map.getCanvasContainer().style.cursor = 'grabbing';
@@ -262,7 +276,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
         const tempArrow: ArrowAnnotation = {
           id: 'preview',
           points: [start, end],
-          stroke, strokeWidth, strokeStyle, bidirectional,
+          stroke, strokeWidth, strokeStyle, bidirectional, headScale,
         };
         setPreview(arrowToFeatures(tempArrow, false));
       }
@@ -324,7 +338,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
         const arrow: ArrowAnnotation = {
           id: nextId(),
           points: [start, end],
-          stroke, strokeWidth, strokeStyle, bidirectional,
+          stroke, strokeWidth, strokeStyle, bidirectional, headScale,
         };
         store.add(arrow);
         setSelectedId(arrow.id);
@@ -341,7 +355,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
       map.off('mouseup', onMouseUp);
       clearPreview();
     };
-  }, [map, active, store, selectedId, stroke, strokeWidth, strokeStyle, bidirectional,
+  }, [map, active, store, selectedId, stroke, strokeWidth, strokeStyle, bidirectional, headScale,
       hitTestArrow, hitTestCpHandle, setPreview, clearPreview]);
 
   /* ---- Cursor ---- */
@@ -390,6 +404,21 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
         e.preventDefault(); store.undo();
       } else if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
         e.preventDefault(); store.redo();
+      } else if (mod && e.key === 'c' && selectedId) {
+        e.preventDefault();
+        const arrow = store.getAll().find((a) => a.id === selectedId);
+        if (arrow) clipboardRef.current = { ...arrow, points: arrow.points.map(p => [...p] as [number, number]) };
+      } else if (mod && e.key === 'v' && clipboardRef.current) {
+        e.preventDefault();
+        const src = clipboardRef.current;
+        const offset = 0.005;
+        const pasted: ArrowAnnotation = {
+          ...src,
+          id: nextId(),
+          points: src.points.map(([lng, lat]) => [lng + offset, lat - offset] as [number, number]),
+        };
+        store.add(pasted);
+        setSelectedId(pasted.id);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault();
         store.remove(selectedId);
@@ -409,6 +438,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
     setStrokeWidth(arrow.strokeWidth);
     setStrokeStyle(arrow.strokeStyle);
     setBidirectional(arrow.bidirectional ?? false);
+    setHeadScale(arrow.headScale ?? 1);
   };
 
   const applyStyle = (changes: Partial<ArrowAnnotation>) => {
@@ -483,7 +513,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
               </div>
             </div>
           ) : (
-            <div className="hint-bar">Click and drag to draw an arrow · Shift to snap 45°</div>
+            <div className="hint-bar">Click and drag to draw an arrow · Shift to snap 45° · Click an arrow to select it</div>
           )}
 
           {/* Stroke color */}
@@ -565,6 +595,22 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
                 </svg>
               </button>
             </div>
+          </div>
+
+          {/* Arrowhead size */}
+          <div className="style-row">
+            <label className="style-label">Head</label>
+            <input
+              type="range" min="0.2" max="3" step="0.1"
+              value={headScale}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setHeadScale(val);
+                applyStyle({ headScale: val });
+              }}
+              className="style-slider"
+            />
+            <span className="style-value">{headScale.toFixed(1)}x</span>
           </div>
 
           {/* Undo / Redo */}

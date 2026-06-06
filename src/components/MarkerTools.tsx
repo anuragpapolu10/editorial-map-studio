@@ -58,6 +58,8 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
   const [size, setSize] = useState(1);
   const draggingRef = useRef(false);
   const dragStartRef = useRef<{ lng: number; lat: number } | null>(null);
+  const altDuplicateRef = useRef(false);
+  const clipboardRef = useRef<MarkerAnnotation | null>(null);
 
   // Subscribe to store
   useEffect(() => {
@@ -171,7 +173,20 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
       const id = features[0].properties?.id;
       if (!id) return;
 
-      dragId = id;
+      // Alt+drag: duplicate the marker and drag the copy
+      if (e.originalEvent.altKey) {
+        const orig = store.getAll().find((m) => m.id === id);
+        if (orig) {
+          const dupeId = nextId();
+          const dupe: MarkerAnnotation = { ...orig, id: dupeId };
+          store.add(dupe);
+          dragId = dupeId;
+          altDuplicateRef.current = true;
+        }
+      } else {
+        dragId = id;
+        altDuplicateRef.current = false;
+      }
       draggingRef.current = false;
       dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
       map.getCanvasContainer().style.cursor = 'grabbing';
@@ -281,6 +296,17 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
         e.preventDefault(); store.undo();
       } else if (mod && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
         e.preventDefault(); store.redo();
+      } else if (mod && e.key === 'c' && selectedId) {
+        e.preventDefault();
+        const marker = store.getAll().find((m) => m.id === selectedId);
+        if (marker) clipboardRef.current = { ...marker };
+      } else if (mod && e.key === 'v' && clipboardRef.current) {
+        e.preventDefault();
+        const src = clipboardRef.current;
+        const offset = 0.005;
+        const pasted: MarkerAnnotation = { ...src, id: nextId(), lng: src.lng + offset, lat: src.lat - offset };
+        store.add(pasted);
+        setSelectedId(pasted.id);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault();
         store.remove(selectedId);
@@ -359,7 +385,7 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
               </div>
             </div>
           ) : (
-            <div className="hint-bar">Click map to place a marker, or click a marker to select</div>
+            <div className="hint-bar">Click map to place a marker · Click a marker to select · Alt+drag to duplicate · Ctrl+C / Ctrl+V to copy/paste</div>
           )}
 
           {/* Shape picker */}

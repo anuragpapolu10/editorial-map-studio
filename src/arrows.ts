@@ -9,6 +9,7 @@ export interface ArrowAnnotation {
   strokeWidth: number;
   strokeStyle: StrokeStyle;
   bidirectional?: boolean;
+  headScale?: number; // multiplier for arrowhead size, default 1
 }
 
 /* ---- Catmull-Rom spline math ---- */
@@ -115,7 +116,7 @@ export function arrowToFeatures(
   const adx = end[0] - start[0];
   const ady = end[1] - start[1];
   const arrowLen = Math.sqrt(adx * adx + ady * ady);
-  const headLen = arrowLen * 0.08;
+  const headLen = arrowLen * 0.08 * (arrow.headScale ?? 1);
 
   // Step 1: Trim shaft — remove points within half headLen of the endpoint
   const trimDist2 = (headLen * 0.5) * (headLen * 0.5);
