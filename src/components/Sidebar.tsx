@@ -97,7 +97,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
       </div>
 
       <div className="sidebar-footer">
-        Designed by Anurag Papolu &middot; <a href="https://tally.so/r/Ek6xeN" target="_blank" rel="noopener noreferrer" className="feedback-link">Feedback</a> &middot; <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="github-link">GitHub</a>
+        Designed by Anurag Papolu &middot; <a href="https://tally.so/r/Ek6xeN" target="_blank" rel="noopener noreferrer" className="feedback-link">Feedback</a> &middot; <a href="https://github.com/anuragpapolu10/editorial-map-studio" target="_blank" rel="noopener noreferrer" className="github-link">GitHub</a>
       </div>
     </div>
   );
