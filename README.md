@@ -36,7 +36,7 @@ These aren't decorations — they're what separates a useful map from a confusin
 - **Title & subtitle** — overlay text with adjustable size and alignment.
 - **Scale bar** — automatic scale bar in miles or kilometers.
 - **Globe view** — toggle between flat Mercator and 3D globe projection.
-- **Export** — save your map as JPG, PNG (layered), SVG, or GeoJSON. SVG export works — it downloads an SVG file and features show up as vector elements — but it's not perfect: text background boxes don't render, there are font substitution warnings in Illustrator, and marker sizes may differ from the on-screen preview.
+- **Export** — save your map as JPG, PNG (layered), SVG, or GeoJSON. SVG export works — it downloads an SVG file and features show up as vector elements — but it's not perfect: text background boxes don't render, there are font substitution warnings in Illustrator, and marker sizes may differ from the on-screen preview. GeoJSON export includes shapes and markers; text annotations do not render in most GeoJSON viewers.
 - **Undo/redo** — full undo/redo history for all drawing tools.
 - **Keyboard shortcuts** — spacebar to pan, Shift for 45-degree snap, Delete to remove, Escape to deselect.
 

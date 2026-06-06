@@ -961,7 +961,10 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
     // Arrows
     for (const arrow of arrowStore.getAll()) {
-      const coords = arrow.points.map((p) => [p[0], p[1]]);
+      const sampled = arrow.points.length <= 2
+        ? arrow.points
+        : sampleSpline(arrow.points);
+      const coords = sampled.map((p) => [p[0], p[1]]);
       features.push({
         type: 'Feature',
         properties: {
