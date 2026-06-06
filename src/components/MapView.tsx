@@ -201,8 +201,8 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
       center: [-73.95, 40.65],
       zoom: 10,
       attributionControl: { compact: false },
-      preserveDrawingBuffer: true, // needed for canvas.toDataURL() export
-    });
+      preserveDrawingBuffer: true as any, // needed for canvas.toDataURL() export
+    } as any);
 
     const navCtrl = new maplibregl.NavigationControl({ visualizePitch: true });
     map.addControl(navCtrl, 'top-right');
