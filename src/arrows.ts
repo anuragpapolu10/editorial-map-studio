@@ -114,7 +114,7 @@ export function arrowToFeatures(
   const adx = end[0] - start[0];
   const ady = end[1] - start[1];
   const arrowLen = Math.sqrt(adx * adx + ady * ady);
-  const headLen = Math.max(arrowLen * 0.08, 0.008);
+  const headLen = arrowLen * 0.08;
 
   // Step 1: Trim shaft — remove points within half headLen of the endpoint
   const trimDist2 = (headLen * 0.5) * (headLen * 0.5);
