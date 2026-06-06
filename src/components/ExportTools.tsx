@@ -1158,15 +1158,26 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           Export PNG ({2 + (overlay.title || overlay.subtitle ? 1 : 0) + (overlay.showScaleBar ? 1 : 0) + (legendEntries.length > 0 ? 1 : 0)} files)
         </button>
       </div>
+
+      <div className="export-experimental-label">Experimental</div>
       <div className="export-btn-row" style={{ marginTop: 6 }}>
-        <button className="action-btn" onClick={exportSvg} disabled={!map}>
+        <button
+          className="action-btn"
+          onClick={exportSvg}
+          disabled={!map}
+          title="Basemap is embedded as raster (large file). Features are vector but text background boxes may not render, fonts may show warnings in Illustrator, and marker sizes may differ."
+        >
           Export SVG
         </button>
-        <button className="action-btn" onClick={exportGeoJson} disabled={!map}>
+        <button
+          className="action-btn"
+          onClick={exportGeoJson}
+          disabled={!map}
+          title="Exports shapes, markers, and arrows as GeoJSON. Text annotations, arrowheads, colors, and fill styles are stored as properties but won't render in most GeoJSON viewers."
+        >
           Export GeoJSON
         </button>
       </div>
-      <p className="export-notice">SVG: Map tiles are embedded as raster — file size will be large. Features are vector. Ignore the font warning when opening in Illustrator.</p>
     </div>
   );
 }
