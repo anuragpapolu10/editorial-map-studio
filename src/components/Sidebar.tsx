@@ -12,7 +12,7 @@ import { AnnotationStore } from '../annotations';
 import { ShapeStore } from '../shapes';
 import { MarkerStore } from '../markers';
 import { ArrowStore } from '../arrows';
-import type { OverlaySettings } from '../App';
+import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
 
 export type ActiveTool = null | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line';
@@ -27,9 +27,11 @@ interface SidebarProps {
   setOverlay: React.Dispatch<React.SetStateAction<OverlaySettings>>;
   legendEntries: LegendEntry[];
   setLegendEntries: React.Dispatch<React.SetStateAction<LegendEntry[]>>;
+  aspectRatio: AspectRatio;
+  setAspectRatio: React.Dispatch<React.SetStateAction<AspectRatio>>;
 }
 
-export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowStore, overlay, setOverlay, legendEntries, setLegendEntries }: SidebarProps) {
+export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowStore, overlay, setOverlay, legendEntries, setLegendEntries, aspectRatio, setAspectRatio }: SidebarProps) {
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
 
   return (
@@ -93,6 +95,8 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
           shapeStore={shapeStore}
           markerStore={markerStore}
           arrowStore={arrowStore}
+          aspectRatio={aspectRatio}
+          setAspectRatio={setAspectRatio}
         />
       </div>
 

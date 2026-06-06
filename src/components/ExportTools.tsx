@@ -1,5 +1,5 @@
 import type maplibregl from 'maplibre-gl';
-import type { OverlaySettings } from '../App';
+import type { OverlaySettings, AspectRatio } from '../App';
 import { computeScaleBar } from '../scalebar';
 import type { ScaleUnit } from '../scalebar';
 import type { LegendEntry } from '../legend';
@@ -17,6 +17,8 @@ interface ExportToolsProps {
   shapeStore: ShapeStore;
   markerStore: MarkerStore;
   arrowStore: ArrowStore;
+  aspectRatio: AspectRatio;
+  setAspectRatio: React.Dispatch<React.SetStateAction<AspectRatio>>;
 }
 
 async function downloadDataUrl(dataUrl: string, filename: string) {
@@ -725,7 +727,15 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function ExportTools({ map, overlay, setOverlay, legendEntries, annotationStore, shapeStore, markerStore, arrowStore }: ExportToolsProps) {
+const ASPECT_PRESETS: { label: string; value: AspectRatio; icon: string }[] = [
+  { label: 'Free', value: null, icon: '⊡' },
+  { label: '3:2', value: '3:2', icon: '▬' },
+  { label: '1:1', value: '1:1', icon: '■' },
+  { label: '3:4', value: '3:4', icon: '▮' },
+  { label: '9:16', value: '9:16', icon: '▯' },
+];
+
+export function ExportTools({ map, overlay, setOverlay, legendEntries, annotationStore, shapeStore, markerStore, arrowStore, aspectRatio, setAspectRatio }: ExportToolsProps) {
   const updateField = <K extends keyof OverlaySettings>(key: K, value: OverlaySettings[K]) => {
     setOverlay((prev) => ({ ...prev, [key]: value }));
   };
@@ -1050,6 +1060,23 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
   return (
     <div className="export-tools">
+      {/* Aspect ratio presets */}
+      <div className="style-row" style={{ marginBottom: 12 }}>
+        <span className="style-label">Format</span>
+        <div className="font-toggle">
+          {ASPECT_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              className={`font-btn${aspectRatio === preset.value ? ' font-btn-on' : ''}`}
+              onClick={() => setAspectRatio(preset.value)}
+              title={preset.value ? `${preset.value} aspect ratio` : 'Free (fill available space)'}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="export-overlay-fields">
         <input
           type="text"

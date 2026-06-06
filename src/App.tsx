@@ -10,6 +10,8 @@ import type { ScaleUnit } from './scalebar';
 import type { LegendEntry } from './legend';
 import './App.css';
 
+export type AspectRatio = null | '3:2' | '1:1' | '3:4' | '9:16';
+
 export interface OverlaySettings {
   title: string;
   subtitle: string;
@@ -34,6 +36,7 @@ function App() {
   const [map, setMap] = useState<maplibregl.Map | null>(null);
   const [overlay, setOverlay] = useState<OverlaySettings>(DEFAULT_OVERLAY);
   const [legendEntries, setLegendEntries] = useState<LegendEntry[]>([]);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(null);
   const annotationStoreRef = useRef(new AnnotationStore());
   const shapeStoreRef = useRef(new ShapeStore());
   const markerStoreRef = useRef(new MarkerStore());
@@ -51,8 +54,10 @@ function App() {
         setOverlay={setOverlay}
         legendEntries={legendEntries}
         setLegendEntries={setLegendEntries}
+        aspectRatio={aspectRatio}
+        setAspectRatio={setAspectRatio}
       />
-      <MapView onMapReady={setMap} overlay={overlay} legendEntries={legendEntries} />
+      <MapView onMapReady={setMap} overlay={overlay} legendEntries={legendEntries} aspectRatio={aspectRatio} />
     </div>
   );
 }

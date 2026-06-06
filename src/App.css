@@ -763,6 +763,19 @@ html, body, #root {
   position: relative;
 }
 
+.map-container-framed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2a2a;
+}
+
+.map-frame {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.4);
+}
+
 /* Coordinates display */
 .coords-display {
   position: absolute;
