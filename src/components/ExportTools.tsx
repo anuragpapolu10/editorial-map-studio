@@ -19,7 +19,35 @@ interface ExportToolsProps {
   arrowStore: ArrowStore;
 }
 
-function downloadDataUrl(dataUrl: string, filename: string) {
+async function downloadDataUrl(dataUrl: string, filename: string) {
+  // Use File System Access API (Save As dialog) when available
+  if ('showSaveFilePicker' in window) {
+    try {
+      const ext = filename.split('.').pop() || '';
+      const mimeTypes: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        svg: 'image/svg+xml', geojson: 'application/geo+json', json: 'application/json',
+      };
+      const accept: Record<string, string[]> = {};
+      if (mimeTypes[ext]) accept[mimeTypes[ext]] = [`.${ext}`];
+
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: filename,
+        types: accept[Object.keys(accept)[0]] ? [{ description: `${ext.toUpperCase()} file`, accept }] : undefined,
+      });
+      const writable = await handle.createWritable();
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (e: any) {
+      if (e.name === 'AbortError') return; // user cancelled
+      // Fall through to legacy download
+    }
+  }
+
+  // Fallback: direct download
   const a = document.createElement('a');
   a.href = dataUrl;
   a.download = filename;
@@ -750,7 +778,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       drawAttribution(cx, c.width, c.height);
       dataUrl = c.toDataURL('image/jpeg', 0.92);
     }
-    downloadDataUrl(dataUrl, 'map-export.jpg');
+    await downloadDataUrl(dataUrl, 'map-export.jpg');
   };
 
   const exportPng = async () => {
@@ -782,7 +810,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       drawAttribution(cx, c.width, c.height);
       bgDataUrl = c.toDataURL('image/png');
     }
-    downloadDataUrl(bgDataUrl, 'map-background.png');
+    await downloadDataUrl(bgDataUrl, 'map-background.png');
 
     // Restore feature layers and wait for them to render
     for (const layerId of featureLayersHidden) {
@@ -825,7 +853,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
     // Capture features only (no overlay on features layer)
     const featuresDataUrl = await captureCanvas('image/png');
-    downloadDataUrl(featuresDataUrl, 'map-features.png');
+    await downloadDataUrl(featuresDataUrl, 'map-features.png');
 
     // 3. Export overlay layers as standalone transparent PNGs
     const mapCanvas = map.getCanvas();
@@ -834,7 +862,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
     if (overlay.title || overlay.subtitle) {
       const titleDataUrl = renderTitleOverlay(overlay, cw, ch);
-      downloadDataUrl(titleDataUrl, 'map-title.png');
+      await downloadDataUrl(titleDataUrl, 'map-title.png');
     }
 
     if (overlay.showScaleBar) {
@@ -844,7 +872,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       const sbCtx = sbCanvas.getContext('2d')!;
       const center = map.getCenter();
       drawScaleBar(sbCtx, cw, ch, map.getZoom(), center.lat, overlay.scaleUnit);
-      downloadDataUrl(sbCanvas.toDataURL('image/png'), 'map-scalebar.png');
+      await downloadDataUrl(sbCanvas.toDataURL('image/png'), 'map-scalebar.png');
     }
 
     if (legendEntries.length > 0) {
@@ -853,7 +881,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       lgCanvas.height = ch;
       const lgCtx = lgCanvas.getContext('2d')!;
       drawLegend(lgCtx, cw, ch, legendEntries);
-      downloadDataUrl(lgCanvas.toDataURL('image/png'), 'map-legend.png');
+      await downloadDataUrl(lgCanvas.toDataURL('image/png'), 'map-legend.png');
     }
 
     // 4. Restore everything
@@ -920,11 +948,11 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
     const svgString = buildSvgExport(map, bgDataUrl, annotationStore, shapeStore, markerStore, arrowStore, overlay, legendEntries);
     const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    downloadDataUrl(url, 'map-export.svg');
+    await downloadDataUrl(url, 'map-export.svg');
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  const exportGeoJson = () => {
+  const exportGeoJson = async () => {
     const features: GeoJSON.Feature[] = [];
 
     // Shapes
@@ -1016,7 +1044,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
     const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
     const url = URL.createObjectURL(blob);
-    downloadDataUrl(url, 'map-features.geojson');
+    await downloadDataUrl(url, 'map-features.geojson');
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
