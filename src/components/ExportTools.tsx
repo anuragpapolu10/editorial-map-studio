@@ -706,7 +706,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
     return new Promise((resolve) => {
       if (!map) { resolve(''); return; }
       map.triggerRepaint();
-      map.once('render', () => {
+      map.once('idle', () => {
         const canvas = map.getCanvas();
         resolve(canvas.toDataURL(format, quality));
       });
