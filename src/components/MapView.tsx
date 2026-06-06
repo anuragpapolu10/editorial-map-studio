@@ -198,14 +198,6 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
           ...layers('protomaps', EDITORIAL_FLAVOR, { lang: 'en' }).slice(2),
         ],
       },
-      sky: {
-        'sky-color': '#f0efeb',
-        'sky-horizon-blend': 0.5,
-        'horizon-color': '#e8e5de',
-        'horizon-fog-blend': 0.5,
-        'fog-color': '#f0efeb',
-        'fog-ground-blend': 0.5,
-      },
       center: [-73.95, 40.65],
       zoom: 10,
       attributionControl: { compact: false },
@@ -255,6 +247,14 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
 
     map.on('load', () => {
       map.setTerrain({ source: 'terrain', exaggeration: 1.5 });
+      (map as any).setSky({
+        'sky-color': '#f0efeb',
+        'sky-horizon-blend': 0.5,
+        'horizon-color': '#e8e5de',
+        'horizon-fog-blend': 0.5,
+        'fog-color': '#f0efeb',
+        'fog-ground-blend': 0.5,
+      });
 
       // --- Shape layers ---
       if (!map.getSource('shapes')) {
