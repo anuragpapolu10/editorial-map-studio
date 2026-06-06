@@ -8,6 +8,7 @@ export interface ArrowAnnotation {
   stroke: string;
   strokeWidth: number;
   strokeStyle: StrokeStyle;
+  bidirectional?: boolean;
 }
 
 /* ---- Catmull-Rom spline math ---- */
@@ -170,6 +171,62 @@ export function arrowToFeatures(
       },
       properties: { ...baseProps, featureType: 'head' },
     });
+  }
+
+  // Bidirectional: add arrowhead at the start
+  if (arrow.bidirectional && shaftCoords.length >= 2 && headLen > 0) {
+    // Trim shaft at start
+    while (shaftCoords.length > 1) {
+      const pt = shaftCoords[0];
+      const dx = pt[0] - start[0];
+      const dy = pt[1] - start[1];
+      if (dx * dx + dy * dy < trimDist2) {
+        shaftCoords.shift();
+      } else {
+        break;
+      }
+    }
+
+    // Direction from second shaft point toward start
+    const firstShaftPt = shaftCoords[0];
+    const sdx = start[0] - firstShaftPt[0];
+    const sdy = start[1] - firstShaftPt[1];
+    const smag = Math.sqrt(sdx * sdx + sdy * sdy);
+
+    if (smag > 0) {
+      const snx = sdx / smag;
+      const sny = sdy / smag;
+
+      const startMid: [number, number] = [
+        start[0] - headLen * 0.5 * snx,
+        start[1] - headLen * 0.5 * sny,
+      ];
+      shaftCoords.unshift(startMid);
+
+      const halfAngle = Math.PI / 7;
+      const cosA = Math.cos(Math.PI - halfAngle);
+      const sinA = Math.sin(Math.PI - halfAngle);
+      const cosB = Math.cos(Math.PI + halfAngle);
+      const sinB = Math.sin(Math.PI + halfAngle);
+
+      const sw1: [number, number] = [
+        start[0] + headLen * (snx * cosA - sny * sinA),
+        start[1] + headLen * (snx * sinA + sny * cosA),
+      ];
+      const sw2: [number, number] = [
+        start[0] + headLen * (snx * cosB - sny * sinB),
+        start[1] + headLen * (snx * sinB + sny * cosB),
+      ];
+
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[sw1, [...start] as [number, number], sw2, sw1]],
+        },
+        properties: { ...baseProps, featureType: 'head' },
+      });
+    }
   }
 
   // Shaft LineString (after arrowhead trimming so shaft ends at arrowhead base)

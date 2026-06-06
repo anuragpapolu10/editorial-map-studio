@@ -553,6 +553,32 @@ function buildSvgExport(
       ];
       svgParts.push(`    <polygon points="${p1[0]},${p1[1]} ${end[0]},${end[1]} ${p2[0]},${p2[1]}" fill="${arrow.stroke}" />`);
     }
+
+    // Bidirectional: arrowhead at start
+    if (arrow.bidirectional && pxPts.length >= 2) {
+      const startPx = px(arrow.points[0]);
+      const nextPx = pxPts[1] || pxPts[0];
+      const sdx = startPx[0] - nextPx[0];
+      const sdy = startPx[1] - nextPx[1];
+      const smag = Math.sqrt(sdx * sdx + sdy * sdy);
+      if (smag > 0) {
+        const snx = sdx / smag;
+        const sny = sdy / smag;
+        const headLen = Math.max(sw * 4, 12 * dpr);
+        const halfAngle = Math.PI / 7;
+        const cosA = Math.cos(halfAngle);
+        const sinA = Math.sin(halfAngle);
+        const sp1: [number, number] = [
+          startPx[0] - headLen * (snx * cosA - sny * sinA),
+          startPx[1] - headLen * (sny * cosA + snx * sinA),
+        ];
+        const sp2: [number, number] = [
+          startPx[0] - headLen * (snx * cosA + sny * sinA),
+          startPx[1] - headLen * (sny * cosA - snx * sinA),
+        ];
+        svgParts.push(`    <polygon points="${sp1[0]},${sp1[1]} ${startPx[0]},${startPx[1]} ${sp2[0]},${sp2[1]}" fill="${arrow.stroke}" />`);
+      }
+    }
   }
 
   // Markers

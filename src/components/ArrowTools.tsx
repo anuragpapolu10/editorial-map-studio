@@ -35,6 +35,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
   const [stroke, setStroke] = useState('#1a1a1a');
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [strokeStyle, setStrokeStyle] = useState<StrokeStyle>('solid');
+  const [bidirectional, setBidirectional] = useState(false);
   const [tooltipMsg, setTooltipMsg] = useState('');
 
   // Interaction refs
@@ -261,7 +262,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
         const tempArrow: ArrowAnnotation = {
           id: 'preview',
           points: [start, end],
-          stroke, strokeWidth, strokeStyle,
+          stroke, strokeWidth, strokeStyle, bidirectional,
         };
         setPreview(arrowToFeatures(tempArrow, false));
       }
@@ -323,7 +324,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
         const arrow: ArrowAnnotation = {
           id: nextId(),
           points: [start, end],
-          stroke, strokeWidth, strokeStyle,
+          stroke, strokeWidth, strokeStyle, bidirectional,
         };
         store.add(arrow);
         setSelectedId(arrow.id);
@@ -340,7 +341,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
       map.off('mouseup', onMouseUp);
       clearPreview();
     };
-  }, [map, active, store, selectedId, stroke, strokeWidth, strokeStyle,
+  }, [map, active, store, selectedId, stroke, strokeWidth, strokeStyle, bidirectional,
       hitTestArrow, hitTestCpHandle, setPreview, clearPreview]);
 
   /* ---- Cursor ---- */
@@ -407,6 +408,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
     setStroke(arrow.stroke);
     setStrokeWidth(arrow.strokeWidth);
     setStrokeStyle(arrow.strokeStyle);
+    setBidirectional(arrow.bidirectional ?? false);
   };
 
   const applyStyle = (changes: Partial<ArrowAnnotation>) => {
@@ -534,6 +536,34 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
                   <svg viewBox="0 0 32 16" width="32" height="16" dangerouslySetInnerHTML={{ __html: opt.svg }} />
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Bidirectional toggle */}
+          <div className="style-row">
+            <label className="style-label">Ends</label>
+            <div className="stroke-style-toggle">
+              <button
+                className={`stroke-style-btn ${!bidirectional ? 'stroke-style-btn-on' : ''}`}
+                onClick={() => { setBidirectional(false); applyStyle({ bidirectional: false }); }}
+                title="One-way arrow"
+              >
+                <svg viewBox="0 0 32 16" width="32" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <line x1="4" y1="8" x2="22" y2="8" strokeLinecap="round" />
+                  <polyline points="19,4 25,8 19,12" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <button
+                className={`stroke-style-btn ${bidirectional ? 'stroke-style-btn-on' : ''}`}
+                onClick={() => { setBidirectional(true); applyStyle({ bidirectional: true }); }}
+                title="Bidirectional arrow"
+              >
+                <svg viewBox="0 0 32 16" width="32" height="16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <line x1="9" y1="8" x2="23" y2="8" strokeLinecap="round" />
+                  <polyline points="12,4 6,8 12,12" strokeLinecap="round" strokeLinejoin="round" />
+                  <polyline points="20,4 26,8 20,12" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             </div>
           </div>
 
