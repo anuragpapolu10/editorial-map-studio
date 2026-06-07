@@ -1,5 +1,6 @@
 import type maplibregl from 'maplibre-gl';
 import type { OverlaySettings, AspectRatio } from '../App';
+import { RATIO_VALUES } from '../App';
 import { computeScaleBar } from '../scalebar';
 import type { ScaleUnit } from '../scalebar';
 import type { LegendEntry } from '../legend';
@@ -828,6 +829,43 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * Crop a canvas data URL to the visible area defined by the aspect ratio.
+ * The map canvas is full-size; letterbox bars mask the edges visually but
+ * don't change the canvas. This replicates that crop for export.
+ */
+async function cropToAspectRatio(
+  sourceDataUrl: string,
+  canvasW: number,
+  canvasH: number,
+  aspectRatio: AspectRatio,
+  format: string,
+  quality?: number,
+): Promise<string> {
+  if (!aspectRatio) return sourceDataUrl;
+
+  const ratio = RATIO_VALUES[aspectRatio];
+  if (!ratio) return sourceDataUrl;
+
+  let w = canvasW;
+  let h = canvasW / ratio;
+  if (h > canvasH) { h = canvasH; w = canvasH * ratio; }
+
+  const cropX = Math.max(0, (canvasW - w) / 2);
+  const cropY = Math.max(0, (canvasH - h) / 2);
+  const cropW = Math.round(w);
+  const cropH = Math.round(h);
+
+  const img = await loadImage(sourceDataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = cropW;
+  canvas.height = cropH;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+  return canvas.toDataURL(format, quality);
+}
+
 const ASPECT_PRESETS: { label: string; value: AspectRatio; icon: string }[] = [
   { label: 'Free', value: null, icon: '⊡' },
   { label: '3:2', value: '3:2', icon: '▬' },
@@ -855,6 +893,9 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
   const exportJpg = async () => {
     if (!map) return;
     let dataUrl = await captureCanvas('image/png'); // capture as PNG first to preserve alpha
+    const mapCanvas = map.getCanvas();
+    // Crop to aspect ratio before any compositing
+    dataUrl = await cropToAspectRatio(dataUrl, mapCanvas.width, mapCanvas.height, aspectRatio, 'image/png');
     // Composite onto white background (fixes black globe background in JPG)
     {
       const img = await loadImage(dataUrl);
@@ -919,7 +960,12 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       }
     }
 
+    const mapCanvas = map.getCanvas();
+    const fullW = mapCanvas.width;
+    const fullH = mapCanvas.height;
     let bgDataUrl = await captureCanvas('image/png');
+    // Crop to aspect ratio
+    bgDataUrl = await cropToAspectRatio(bgDataUrl, fullW, fullH, aspectRatio, 'image/png');
     // Add attribution to background
     {
       const bgImg = await loadImage(bgDataUrl);
@@ -972,13 +1018,24 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
     } catch { /* no background layer */ }
 
     // Capture features only (no overlay on features layer)
-    const featuresDataUrl = await captureCanvas('image/png');
+    let featuresDataUrl = await captureCanvas('image/png');
+    featuresDataUrl = await cropToAspectRatio(featuresDataUrl, fullW, fullH, aspectRatio, 'image/png');
     await downloadDataUrl(featuresDataUrl, 'map-features.png');
 
     // 3. Export overlay layers as standalone transparent PNGs
-    const mapCanvas = map.getCanvas();
-    const cw = mapCanvas.width;
-    const ch = mapCanvas.height;
+    // Use cropped dimensions for overlay layers
+    let cw = fullW;
+    let ch = fullH;
+    if (aspectRatio) {
+      const ratio = RATIO_VALUES[aspectRatio];
+      if (ratio) {
+        let w = fullW;
+        let h = fullW / ratio;
+        if (h > fullH) { h = fullH; w = fullH * ratio; }
+        cw = Math.round(w);
+        ch = Math.round(h);
+      }
+    }
 
     if (overlay.title || overlay.subtitle) {
       const titleDataUrl = renderTitleOverlay(overlay, cw, ch);
