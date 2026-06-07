@@ -67,14 +67,14 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 
 ## Key Files
 - `src/App.tsx` — wires stores, aspect ratio state, letterbox bar computation, passes to Sidebar and MapView
-- `src/components/MapView.tsx` — map initialization, tile sources, all MapLibre layers (shapes, markers, arrows, annotations), compass/scale bar/legend live previews
+- `src/components/MapView.tsx` — map initialization, tile sources, all MapLibre layers (shapes, markers, arrows, annotations), compass/scale bar/legend live previews, inset minimap (second MapLibre instance with viewport indicator)
 - `src/components/Sidebar.tsx` — ActiveTool type definition, tool layout and orchestration
 - `src/components/DrawingTools.tsx` — text label tool (place, select, double-click edit, style, copy/paste, alt+drag duplicate)
 - `src/components/ShapeTools.tsx` — rectangle/ellipse/line/polygon tool (draw, select, drag, style, rotation, copy/paste, alt+drag duplicate)
 - `src/components/MarkerTools.tsx` — marker placement tool (place, select, drag, style, copy/paste, alt+drag duplicate)
 - `src/components/ArrowTools.tsx` — freeform arrow tool (click-drag to draw, click-shaft to add bends, drag handles to reshape, bidirectional toggle, head scale slider, copy/paste, alt+drag duplicate)
 - `src/components/LayerToggles.tsx` — layer visibility toggles with sub-groups
-- `src/components/ExportTools.tsx` — all export logic (JPG, PNG, SVG, GeoJSON), title/subtitle overlay, scale bar, compass, legend rendering, aspect ratio presets, Save As dialog
+- `src/components/ExportTools.tsx` — all export logic (JPG, PNG, SVG, GeoJSON), title/subtitle overlay, scale bar, compass, legend, inset minimap rendering, aspect ratio crop, DPR scaling, Save As dialog
 - `src/components/LegendBuilder.tsx` — sidebar legend builder UI
 - `src/annotations.ts` — text label data store with undo/redo
 - `src/shapes.ts` — shape data store with undo/redo, geometry helpers (getCentroid, rotateVertices, translateVertices, makeRectVertices, makeEllipseVertices)
@@ -83,7 +83,7 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - `src/crossSelect.ts` — cross-tool selection: `hitTestAllTools()`, `setPending()`, `consumePending()`
 - `src/snap.ts` — Shift-key constraint helpers: `snapTo45()`, `snapSquare()`, `snapCircle()`. All functions correct for lng/lat distortion using `cos(latitude)` so shapes look correct on screen
 - `src/spacebar.ts` — global spacebar state tracker
-- `src/editorial-style.ts` — editorial color palette (Protomaps Flavor)
+- `src/editorial-style.ts` — editorial color palette (Protomaps Flavor). Island labels use `kind: "island"` from the `earth` source-layer, styled with `subplace_label` color in italic.
 - `src/App.css` — all styling, including letterbox bar styles and CSS variable-based control repositioning
 - `src/scalebar.ts` — scale bar computation (metric/imperial/nautical unit systems, round-number snapping)
 - `src/legend.ts` — legend entry data model (`LegendEntry`, `LegendSymbol`, `createLegendEntry`)
@@ -97,7 +97,7 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 ## Completed Features
 - [x] Editorial map styling
 - [x] Layer toggles (water, roads, buildings, boundaries, parks, terrain, labels)
-- [x] Label sub-toggles (neighborhoods, cities, states, countries, water, roads)
+- [x] Label sub-toggles (neighborhoods, cities, states, islands, countries, water, roads)
 - [x] Hillshade terrain relief
 - [x] **Text labels**: click-to-place, double-click-to-edit, bold/italic, rotation, background box, 7 colors, copy/paste, alt+drag duplicate
 - [x] **Markers**: 4 shapes (circle, square, triangle, pin), 7 colors, size slider 0.5x-2x, drag-to-move, copy/paste, alt+drag duplicate
@@ -121,22 +121,25 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - **Implementation**: the map canvas stays full size always (never resized). Dark overlay bars (`#2a2a2a`, `z-index: 3`, `pointer-events: none`) are positioned absolutely over the edges to create the letterbox effect. This avoids a MapLibre v5 bug where globe sky disappears after `map.resize()`.
 - CSS custom properties (`--bar-top`, `--bar-bottom`, `--bar-left`, `--bar-right`) are set on the `.map-area` div and used to offset all positioned elements: MapLibre controls (`.maplibregl-ctrl-*`), coords display, title overlay, scale bar, legend, and compass.
 - Bar dimensions computed via `ResizeObserver` on the `.map-area` container.
-- **Export note**: since the map canvas is not actually resized, exports capture the full canvas. Cropping to the aspect ratio must happen in the export pipeline (not yet implemented — exports currently capture full canvas regardless of aspect ratio selection).
+- **Export**: `cropToAspectRatio()` in ExportTools.tsx crops the captured canvas to match the letterboxed area before compositing overlays. Applied to both JPG and PNG exports.
 
 ### Export System
 - [x] **JPG export** — full canvas screenshot with all overlays composited (title, scale bar, compass, legend, attribution). Canvas captured as PNG first, composited onto `#f0efeb` background, then converted to JPEG.
-- [x] **PNG export** — layered export: `map-background.png` (basemap only), `map-features.png` (shapes/arrows/markers on transparent), plus optional `map-title.png`, `map-scalebar.png`, `map-legend.png` as standalone transparent layers. All same canvas size for perfect stacking in Photoshop/Illustrator. Button shows dynamic file count (2–5 files). Uses `map.once('idle')` for capture (not `render`) to ensure text/symbols are fully placed.
+- [x] **PNG export** — layered export: `map-background.png` (basemap only), `map-features.png` (shapes/arrows/markers on transparent), plus optional `map-title.png`, `map-scalebar.png`, `map-legend.png`, `map-inset.png` as standalone transparent layers. All same canvas size for perfect stacking in Photoshop/Illustrator. Button shows dynamic file count (2–6 files). Uses `map.once('idle')` for capture (not `render`) to ensure text/symbols are fully placed.
 - [x] **Title/subtitle overlay** — live preview on map viewport (DOM overlay, top of map). Playfair Display serif title + Inter sans-serif subtitle. Controls: left/center alignment toggle, title size slider (16–72px), subtitle size slider (10–48px). Composited onto JPG; separate transparent PNG for layered export.
 - [x] **Scale bar** — toggle in Export section with unit selector (metric km/m, imperial mi/ft, nautical nmi). Live preview bottom-right on map, updates on zoom/pan. U-shaped bar with text halo. Round-number snapping per unit system. Composited onto JPG; separate transparent PNG for layered export. **Bug fix**: `showScaleBar` added to effect dependency array so scale bar appears immediately on toggle (was only appearing after unit change).
 - [x] **Compass / north arrow** — toggle in Export section. Live preview top-right on map. Compass rose with dark north pointer, light south pointer, center dot, "N" label. Rotates with map bearing. Rendered in JPG (canvas `drawCompass()`) and SVG (vector `<g id="compass">` with rotation transform) exports.
 - [x] **Legend builder** — manual legend (NOT auto-generated). Each entry: symbol (circle/square/triangle/pin/line), fill color (6 swatches), fill opacity, stroke width, stroke color, stroke opacity, text label. Reorder (↑↓) and delete per entry. Live preview bottom-left on map. Composited onto JPG; separate transparent PNG for layered export.
 - [x] **SVG export** — raster basemap as embedded `<image>` (with `xlink:href` for Illustrator compat) + all features as vector SVG elements. Named groups: `basemap`, `features`, `title-overlay`, `scale-bar`, `compass`, `legend` — each becomes a layer in Illustrator. All coordinates scaled by `devicePixelRatio`. No `rgba()` in SVG attributes (Illustrator renders them as black) — uses separate `fill`/`stroke` + `fill-opacity`/`stroke-opacity` instead. **Experimental**: text bg boxes don't render, font warnings in Illustrator, marker sizes may differ.
 - [x] **GeoJSON export** — dumps all features as a standard `FeatureCollection`. Shapes → Polygon/LineString, arrows → LineString (sampled spline curve, not raw control points), markers → Point, annotations → Point. All properties (colors, sizes, styles) preserved in feature properties. **Experimental**: arrowheads, colors, fills, and text don't render in most GeoJSON viewers.
-- [x] **Save As dialog** — uses File System Access API (`showSaveFilePicker`) for native Save As dialog on Chrome/Edge. Falls back to direct download on Firefox/Safari. All export functions use `async downloadDataUrl()`.
+- [x] **Save As dialog** — uses File System Access API (`showSaveFilePicker`) for native Save As dialog on Chrome/Edge. Falls back to blob URL download on Firefox/Safari (handles large files reliably). User gesture may expire during long async export pipeline, in which case falls back to direct download gracefully. All export functions use `async downloadDataUrl()`.
 - [x] **Export attribution** — "Editorial Map Studio | Esri, Maxar, Earthstar Geographics | Protomaps | OpenStreetMap" in bottom-right of all exports.
+- [x] **DPR-aware export overlays** — all export drawing functions (title, subtitle, scale bar, compass, legend, attribution, inset minimap) scale by `window.devicePixelRatio` so overlays render at correct size on retina displays.
+- [x] **Aspect ratio export cropping** — JPG and PNG exports crop the captured canvas to the selected aspect ratio (3:2, 1:1, 3:4, 9:16) before compositing overlays. PNG overlay layers (title, scale bar, legend, inset) are also rendered at the cropped dimensions.
+- [x] **Inset minimap** — a second MapLibre GL instance positioned bottom-right above the scale bar. Shows the same editorial basemap zoomed out 5 levels, synced to main map center. Blue rectangle shows the main map's viewport bounds. Toggle in Export panel ("Inset map"), on by default. Requires `preserveDrawingBuffer: true` for export capture. Composited onto JPG exports; saved as separate `map-inset.png` in PNG export. Custom implementation (no plugin) using the same maplibre-gl instance to avoid version conflicts.
 
 ### Overlay State Architecture
-- `OverlaySettings` interface in `App.tsx` holds title, subtitle, sizes, alignment, scale bar toggle, scale unit, compass toggle — all lifted to App level
+- `OverlaySettings` interface in `App.tsx` holds title, subtitle, sizes, alignment, scale bar toggle, scale unit, compass toggle, minimap toggle — all lifted to App level
 - `AspectRatio` type: `null | '3:2' | '1:1' | '3:4' | '9:16'` — also in App.tsx with `RATIO_VALUES` lookup
 - `LegendEntry[]` state also in App, passed down to Sidebar (LegendBuilder) and MapView (live preview)
 - MapView renders DOM overlays (title band, scale bar, compass, legend card) via props — these are `pointer-events: none` and don't interfere with map interaction
@@ -161,7 +164,7 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - Legend colors: 6 swatches only (black, grey, white, red, green, blue) — matches marker palette
 - Scale bar unit selector: km / mi / nmi toggle buttons with a thin separator line after nmi
 - PNG export button shows dynamic file count based on active overlays
-- Export section order: aspect ratio presets → title input → subtitle input → alignment → title size → subtitle size → scale bar toggle/units → compass toggle → export buttons → experimental section (SVG, GeoJSON with hover tooltips)
+- Export section order: aspect ratio presets → title input → subtitle input → alignment → title size → subtitle size → scale bar toggle/units → compass toggle → inset map toggle → export buttons → experimental section (SVG, GeoJSON with hover tooltips)
 - Layer Toggles: satellite at top with opacity slider (default 20%), then all vector groups each with chevron dropdown containing opacity slider
 - Default map center: Brooklyn, NYC (`[-73.95, 40.65]`, zoom 10)
 - `MapSettings.tsx` exists but is unused (was replaced by GlobeControl in MapView) — can be deleted
@@ -179,6 +182,7 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 4. All vector layers: parks, water, roads, buildings, boundaries, labels (protomaps slice 2+)
 5. User-drawn features (shapes, arrows, markers, annotations)
 6. DOM overlays: title band, scale bar, compass, legend card (pointer-events: none)
+7. Inset minimap (separate MapLibre instance, bottom-right, above scale bar)
 
 ### Per-Layer Opacity
 - Every layer group has a chevron dropdown with an opacity slider (0–100%)
