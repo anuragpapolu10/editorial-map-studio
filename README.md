@@ -28,25 +28,30 @@ These aren't decorations — they're what separates a useful map from a confusin
 
 ## What it does
 
-- **Basemap** — clean, publication-ready cartography with Protomaps vector tiles. Toggle satellite imagery, terrain relief, water, roads, buildings, boundaries, parks, and labels independently.
+- **Basemap** — clean, publication-ready cartography with Protomaps vector tiles. Toggle satellite imagery, terrain relief, water, roads, buildings, boundaries, parks, and labels (neighborhoods, cities, states, islands, countries, water, roads) independently. Per-layer opacity controls.
 - **Text labels** — place, style, and rotate text annotations on the map. Bold, italic, font size, color, background toggle.
-- **Markers** — drop pins, circles, squares, triangles, and diamonds with customizable color and size.
-- **Arrows** — curved arrows with draggable bezier control points, adjustable stroke and arrowhead style.
+- **Markers** — drop pins, circles, squares, and triangles with customizable color and size.
+- **Arrows** — freeform curved arrows with click-on-shaft bend points, Catmull-Rom spline curves, adjustable stroke/dash styles, bidirectional toggle, and arrowhead size slider.
 - **Shapes** — rectangles, ellipses, lines, and polygons with stroke color/width/dash, fill color/opacity, and rotation. Drag corner/edge handles to resize, drag vertices to reshape.
-- **Copy/paste & duplicate** — Ctrl+C/V to copy and paste shapes. Alt+drag to duplicate and place in one gesture.
-- **Legend builder** — add labeled entries with customizable symbols and colors.
-- **Title & subtitle** — overlay text with adjustable size and alignment.
-- **Scale bar** — automatic scale bar in miles or kilometers.
-- **Globe view** — toggle between flat Mercator and 3D globe projection.
-- **Export** — save your map as JPG, PNG (layered), SVG, or GeoJSON. SVG and GeoJSON are experimental: SVG exports features as vector elements but text background boxes don't render, there are font substitution warnings in Illustrator, and marker sizes may differ from the on-screen preview. GeoJSON exports shapes, markers, and arrows, but arrowheads, colors, fills, and text annotations won't render in most GeoJSON viewers (they're stored as feature properties).
+- **Copy/paste & duplicate** — Ctrl+C/V to copy and paste any element. Alt+drag to duplicate and place in one gesture.
+- **Legend builder** — add labeled entries with customizable symbols (circle, square, triangle, pin, line) and colors.
+- **Title & subtitle** — overlay text with adjustable size and alignment (left/center).
+- **Scale bar** — automatic scale bar in metric (km), imperial (mi), or nautical (nmi) units.
+- **Compass** — north arrow that rotates with the map bearing.
+- **Inset map** — automatic overview minimap showing the main map's viewport at a zoomed-out level. Toggleable in the export panel, included in exports.
+- **Globe view** — toggle between flat Mercator and 3D globe projection with terrain.
+- **Aspect ratio presets** — Free, 3:2, 1:1, 3:4, 9:16. Letterbox bars show the crop; exports are cropped to match.
+- **Export**:
+  - **JPG** — composited image with all overlays (title, scale bar, compass, legend, inset map, attribution), cropped to selected aspect ratio.
+  - **PNG** — layered export (2–6 separate files): background, features, title, scale bar, legend, and inset map as individual transparent PNGs for Photoshop/Illustrator stacking.
+  - **SVG** *(experimental)* — raster basemap with vector features as named Illustrator-compatible groups.
+  - **GeoJSON** *(experimental)* — shapes, markers, arrows, and annotations as a standard FeatureCollection.
 - **Undo/redo** — full undo/redo history for all drawing tools.
-- **Keyboard shortcuts** — spacebar to pan, Shift for 45-degree snap, Delete to remove, Escape to deselect.
+- **Keyboard shortcuts** — spacebar to pan, Shift for 45-degree snap, Delete to remove, Escape to deselect, Ctrl+C/V copy/paste.
+- **Cross-tool selection** — click any element while a different tool is active to auto-switch and select it.
 
 ## Planned features
 
-Based on feedback, I'm planning to add:
-
-- **Inset maps** — small overview maps showing where the main map is located
 - **More projections** — beyond Mercator and globe
 - **More basemap styles** — different visual treatments for different story types
 
