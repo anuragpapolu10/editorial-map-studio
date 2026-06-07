@@ -22,7 +22,16 @@ interface ExportToolsProps {
   setAspectRatio: React.Dispatch<React.SetStateAction<AspectRatio>>;
 }
 
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  // Handle both data: URLs and blob: URLs
+  const res = await fetch(dataUrl);
+  return res.blob();
+}
+
 async function downloadDataUrl(dataUrl: string, filename: string) {
+  const blob = await dataUrlToBlob(dataUrl);
+  const blobUrl = URL.createObjectURL(blob);
+
   // Use File System Access API (Save As dialog) when available
   if ('showSaveFilePicker' in window) {
     try {
@@ -39,24 +48,27 @@ async function downloadDataUrl(dataUrl: string, filename: string) {
         types: accept[Object.keys(accept)[0]] ? [{ description: `${ext.toUpperCase()} file`, accept }] : undefined,
       });
       const writable = await handle.createWritable();
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
       await writable.write(blob);
       await writable.close();
+      URL.revokeObjectURL(blobUrl);
       return;
     } catch (e: any) {
-      if (e.name === 'AbortError') return; // user cancelled
-      // Fall through to legacy download
+      if (e.name === 'AbortError') {
+        URL.revokeObjectURL(blobUrl);
+        return; // user cancelled
+      }
+      // Fall through to legacy download (e.g. SecurityError from expired gesture)
     }
   }
 
-  // Fallback: direct download
+  // Fallback: blob URL download (works for large files unlike data URLs)
   const a = document.createElement('a');
-  a.href = dataUrl;
+  a.href = blobUrl;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 }
 
 const ATTRIBUTION = 'Editorial Map Studio | Esri, Maxar, Earthstar Geographics | Protomaps | OpenStreetMap';
@@ -64,21 +76,21 @@ const ATTRIBUTION = 'Editorial Map Studio | Esri, Maxar, Earthstar Geographics |
 /**
  * Draw attribution text (bottom-right) onto a canvas context.
  */
-function drawAttribution(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number) {
-  const fontSize = 10;
-  const pad = 6;
+function drawAttribution(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, dpr = 1) {
+  const fontSize = 10 * dpr;
+  const pad = 6 * dpr;
   ctx.font = `400 ${fontSize}px 'Inter', Helvetica, Arial, sans-serif`;
   const textW = ctx.measureText(ATTRIBUTION).width;
 
   // Semi-transparent background pill
   const bgW = textW + pad * 2;
   const bgH = fontSize + pad * 2;
-  const x = canvasW - bgW - 4;
-  const y = canvasH - bgH - 4;
+  const x = canvasW - bgW - 4 * dpr;
+  const y = canvasH - bgH - 4 * dpr;
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
   ctx.beginPath();
-  ctx.roundRect(x, y, bgW, bgH, 3);
+  ctx.roundRect(x, y, bgW, bgH, 3 * dpr);
   ctx.fill();
 
   // Text
@@ -118,6 +130,7 @@ async function compositeOverlay(
   ov: OverlaySettings,
   format: string,
   quality?: number,
+  dpr = 1,
 ): Promise<string> {
   if (!ov.title && !ov.subtitle) return sourceDataUrl;
 
@@ -130,17 +143,17 @@ async function compositeOverlay(
   // Draw the map image
   ctx.drawImage(img, 0, 0);
 
-  const pad = 24;
-  const lineGap = 6;
+  const pad = 24 * dpr;
+  const lineGap = 6 * dpr;
 
   // Measure text heights
-  ctx.font = `700 ${ov.titleSize}px 'Playfair Display', Georgia, serif`;
+  ctx.font = `700 ${ov.titleSize * dpr}px 'Playfair Display', Georgia, serif`;
   const titleMetrics = ov.title ? ctx.measureText(ov.title) : null;
   const titleH = titleMetrics
     ? titleMetrics.actualBoundingBoxAscent + titleMetrics.actualBoundingBoxDescent
     : 0;
 
-  ctx.font = `400 ${ov.subtitleSize}px 'Inter', Helvetica, Arial, sans-serif`;
+  ctx.font = `400 ${ov.subtitleSize * dpr}px 'Inter', Helvetica, Arial, sans-serif`;
   const subtitleMetrics = ov.subtitle ? ctx.measureText(ov.subtitle) : null;
   const subtitleH = subtitleMetrics
     ? subtitleMetrics.actualBoundingBoxAscent + subtitleMetrics.actualBoundingBoxDescent
@@ -155,7 +168,7 @@ async function compositeOverlay(
 
   // Thin separator line
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 * dpr;
   ctx.beginPath();
   ctx.moveTo(0, bandH);
   ctx.lineTo(img.width, bandH);
@@ -171,7 +184,7 @@ async function compositeOverlay(
 
   // Draw title
   if (ov.title) {
-    ctx.font = `700 ${ov.titleSize}px 'Playfair Display', Georgia, serif`;
+    ctx.font = `700 ${ov.titleSize * dpr}px 'Playfair Display', Georgia, serif`;
     ctx.fillStyle = '#1a1a1a';
     ctx.textBaseline = 'top';
     const tw = ctx.measureText(ov.title).width;
@@ -181,7 +194,7 @@ async function compositeOverlay(
 
   // Draw subtitle
   if (ov.subtitle) {
-    ctx.font = `400 ${ov.subtitleSize}px 'Inter', Helvetica, Arial, sans-serif`;
+    ctx.font = `400 ${ov.subtitleSize * dpr}px 'Inter', Helvetica, Arial, sans-serif`;
     ctx.fillStyle = '#666666';
     ctx.textBaseline = 'top';
     const tw = ctx.measureText(ov.subtitle).width;
@@ -195,23 +208,23 @@ async function compositeOverlay(
  * Render just the title/subtitle bar on a transparent canvas (no map underneath).
  * Returns a data URL for a standalone PNG overlay.
  */
-function renderTitleOverlay(ov: OverlaySettings, width: number, height: number): string {
+function renderTitleOverlay(ov: OverlaySettings, width: number, height: number, dpr = 1): string {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d')!;
 
-  const pad = 24;
-  const lineGap = 6;
+  const pad = 24 * dpr;
+  const lineGap = 6 * dpr;
 
   // Measure text
-  ctx.font = `700 ${ov.titleSize}px 'Playfair Display', Georgia, serif`;
+  ctx.font = `700 ${ov.titleSize * dpr}px 'Playfair Display', Georgia, serif`;
   const titleMetrics = ov.title ? ctx.measureText(ov.title) : null;
   const titleH = titleMetrics
     ? titleMetrics.actualBoundingBoxAscent + titleMetrics.actualBoundingBoxDescent
     : 0;
 
-  ctx.font = `400 ${ov.subtitleSize}px 'Inter', Helvetica, Arial, sans-serif`;
+  ctx.font = `400 ${ov.subtitleSize * dpr}px 'Inter', Helvetica, Arial, sans-serif`;
   const subtitleMetrics = ov.subtitle ? ctx.measureText(ov.subtitle) : null;
   const subtitleH = subtitleMetrics
     ? subtitleMetrics.actualBoundingBoxAscent + subtitleMetrics.actualBoundingBoxDescent
@@ -226,7 +239,7 @@ function renderTitleOverlay(ov: OverlaySettings, width: number, height: number):
 
   // Separator line
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 * dpr;
   ctx.beginPath();
   ctx.moveTo(0, bandH);
   ctx.lineTo(width, bandH);
@@ -240,7 +253,7 @@ function renderTitleOverlay(ov: OverlaySettings, width: number, height: number):
   let y = pad;
 
   if (ov.title) {
-    ctx.font = `700 ${ov.titleSize}px 'Playfair Display', Georgia, serif`;
+    ctx.font = `700 ${ov.titleSize * dpr}px 'Playfair Display', Georgia, serif`;
     ctx.fillStyle = '#1a1a1a';
     ctx.textBaseline = 'top';
     const tw = ctx.measureText(ov.title).width;
@@ -249,7 +262,7 @@ function renderTitleOverlay(ov: OverlaySettings, width: number, height: number):
   }
 
   if (ov.subtitle) {
-    ctx.font = `400 ${ov.subtitleSize}px 'Inter', Helvetica, Arial, sans-serif`;
+    ctx.font = `400 ${ov.subtitleSize * dpr}px 'Inter', Helvetica, Arial, sans-serif`;
     ctx.fillStyle = '#666666';
     ctx.textBaseline = 'top';
     const tw = ctx.measureText(ov.subtitle).width;
@@ -269,35 +282,37 @@ function drawScaleBar(
   zoom: number,
   lat: number,
   unit: ScaleUnit = 'metric',
+  dpr = 1,
 ) {
   const { widthPx, label } = computeScaleBar(zoom, lat, unit, 150);
-  const pad = 16;
-  const barH = 6;
-  const x = canvasW - pad - widthPx;
-  const y = canvasH - pad - barH - 20; // nudge above attribution
+  const scaledWidthPx = widthPx * dpr;
+  const pad = 16 * dpr;
+  const barH = 6 * dpr;
+  const x = canvasW - pad - scaledWidthPx;
+  const y = canvasH - pad - barH - 20 * dpr; // nudge above attribution
 
   // Bar (U-shape: top line + two end ticks)
   ctx.strokeStyle = '#1a1a1a';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2 * dpr;
   ctx.beginPath();
   ctx.moveTo(x, y + barH);
   ctx.lineTo(x, y);
-  ctx.lineTo(x + widthPx, y);
-  ctx.lineTo(x + widthPx, y + barH);
+  ctx.lineTo(x + scaledWidthPx, y);
+  ctx.lineTo(x + scaledWidthPx, y + barH);
   ctx.stroke();
 
   // Label
-  ctx.font = "600 11px 'Inter', Helvetica, Arial, sans-serif";
+  ctx.font = `600 ${11 * dpr}px 'Inter', Helvetica, Arial, sans-serif`;
   ctx.fillStyle = '#1a1a1a';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
 
   // White halo behind text
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3 * dpr;
   ctx.lineJoin = 'round';
-  ctx.strokeText(label, x + widthPx, y - 3);
-  ctx.fillText(label, x + widthPx, y - 3);
+  ctx.strokeText(label, x + scaledWidthPx, y - 3 * dpr);
+  ctx.fillText(label, x + scaledWidthPx, y - 3 * dpr);
 
   // Reset
   ctx.textAlign = 'start';
@@ -308,9 +323,10 @@ function drawCompass(
   ctx: CanvasRenderingContext2D,
   canvasW: number,
   bearing: number,
+  dpr = 1,
 ) {
-  const size = 40;
-  const pad = 16;
+  const size = 40 * dpr;
+  const pad = 16 * dpr;
   const cx = canvasW - pad - size / 2;
   const cy = pad + size / 2;
 
@@ -341,19 +357,19 @@ function drawCompass(
   // Center dot
   ctx.fillStyle = '#1a1a1a';
   ctx.beginPath();
-  ctx.arc(0, 0, 2, 0, Math.PI * 2);
+  ctx.arc(0, 0, 2 * dpr, 0, Math.PI * 2);
   ctx.fill();
 
   // N label
-  ctx.font = "700 11px 'Playfair Display', Georgia, serif";
+  ctx.font = `700 ${11 * dpr}px 'Playfair Display', Georgia, serif`;
   ctx.fillStyle = '#1a1a1a';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3 * dpr;
   ctx.lineJoin = 'round';
-  ctx.strokeText('N', 0, -size * 0.4 - 3);
-  ctx.fillText('N', 0, -size * 0.4 - 3);
+  ctx.strokeText('N', 0, -size * 0.4 - 3 * dpr);
+  ctx.fillText('N', 0, -size * 0.4 - 3 * dpr);
 
   ctx.restore();
 }
@@ -367,6 +383,7 @@ async function compositeScaleBar(
   unit: ScaleUnit,
   format: string,
   quality?: number,
+  dpr = 1,
 ): Promise<string> {
   const img = await loadImage(sourceDataUrl);
   const canvas = document.createElement('canvas');
@@ -376,7 +393,7 @@ async function compositeScaleBar(
   ctx.drawImage(img, 0, 0);
 
   const center = map.getCenter();
-  drawScaleBar(ctx, canvas.width, canvas.height, map.getZoom(), center.lat, unit);
+  drawScaleBar(ctx, canvas.width, canvas.height, map.getZoom(), center.lat, unit, dpr);
 
   return canvas.toDataURL(format, quality);
 }
@@ -389,15 +406,16 @@ function drawLegend(
   _canvasW: number,
   canvasH: number,
   entries: LegendEntry[],
+  dpr = 1,
 ) {
   if (entries.length === 0) return;
 
-  const pad = 12;
-  const rowH = 22;
-  const swatchSize = 14;
-  const gap = 8;
-  const fontSize = 12;
-  const x0 = 12; // left margin from canvas edge
+  const pad = 12 * dpr;
+  const rowH = 22 * dpr;
+  const swatchSize = 14 * dpr;
+  const gap = 8 * dpr;
+  const fontSize = 12 * dpr;
+  const x0 = 12 * dpr; // left margin from canvas edge
 
   ctx.font = `500 ${fontSize}px 'Inter', Helvetica, Arial, sans-serif`;
 
@@ -410,15 +428,15 @@ function drawLegend(
 
   const boxW = pad + swatchSize + gap + maxLabelW + pad;
   const boxH = pad + entries.length * rowH - (rowH - swatchSize) + pad;
-  const y0 = canvasH - 36 - boxH;
+  const y0 = canvasH - 36 * dpr - boxH;
 
   // Background
   ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
   ctx.beginPath();
-  ctx.roundRect(x0, y0, boxW, boxH, 4);
+  ctx.roundRect(x0, y0, boxW, boxH, 4 * dpr);
   ctx.fill();
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 * dpr;
   ctx.stroke();
 
   // Entries
@@ -433,7 +451,7 @@ function drawLegend(
       if (e.strokeWidth > 0) {
         ctx.globalAlpha = e.strokeOpacity;
         ctx.strokeStyle = e.strokeColor;
-        ctx.lineWidth = e.strokeWidth;
+        ctx.lineWidth = e.strokeWidth * dpr;
         ctx.stroke();
       }
     };
@@ -452,7 +470,7 @@ function drawLegend(
       if (e.strokeWidth > 0) {
         ctx.globalAlpha = e.strokeOpacity;
         ctx.strokeStyle = e.strokeColor;
-        ctx.lineWidth = e.strokeWidth;
+        ctx.lineWidth = e.strokeWidth * dpr;
         ctx.strokeRect(x0 + pad, ey, swatchSize, swatchSize);
       }
     } else if (e.symbol === 'triangle') {
@@ -466,11 +484,11 @@ function drawLegend(
       ctx.fill();
       doStroke();
     } else if (e.symbol === 'pin') {
-      const pr = 4;
+      const pr = 4 * dpr;
       ctx.beginPath();
-      ctx.arc(cx, ey + pr + 1, pr, Math.PI, 0);
+      ctx.arc(cx, ey + pr + 1 * dpr, pr, Math.PI, 0);
       ctx.lineTo(cx, ey + swatchSize);
-      ctx.lineTo(cx - pr, ey + pr + 1);
+      ctx.lineTo(cx - pr, ey + pr + 1 * dpr);
       ctx.closePath();
       ctx.globalAlpha = e.opacity;
       ctx.fillStyle = e.color;
@@ -482,7 +500,7 @@ function drawLegend(
       ctx.lineTo(x0 + pad + swatchSize, cy);
       ctx.globalAlpha = e.opacity;
       ctx.strokeStyle = e.color;
-      ctx.lineWidth = Math.max(e.strokeWidth, 2);
+      ctx.lineWidth = Math.max(e.strokeWidth * dpr, 2 * dpr);
       ctx.lineCap = 'round';
       ctx.stroke();
       ctx.lineCap = 'butt';
@@ -830,6 +848,78 @@ function escapeXml(s: string): string {
 }
 
 /**
+ * Capture the minimap canvas as a data URL.
+ * The minimap map instance is stored on the main map as `_minimapMap`.
+ * Waits for the minimap to finish rendering before capturing.
+ */
+function captureMinimapCanvas(map: maplibregl.Map): Promise<string | null> {
+  const minimapMap = (map as any)._minimapMap as maplibregl.Map | undefined;
+  if (!minimapMap) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      minimapMap.triggerRepaint();
+      minimapMap.once('idle', () => {
+        try {
+          resolve(minimapMap.getCanvas().toDataURL('image/png'));
+        } catch {
+          resolve(null);
+        }
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Draw the inset minimap onto a canvas context.
+ * Positioned bottom-right, above the scale bar / attribution area.
+ */
+async function drawMinimap(
+  ctx: CanvasRenderingContext2D,
+  canvasW: number,
+  canvasH: number,
+  minimapDataUrl: string,
+  dpr = 1,
+) {
+  const img = await loadImage(minimapDataUrl);
+
+  const insetW = 180 * dpr;
+  const insetH = 130 * dpr;
+  const pad = 10 * dpr;
+  const bottomOffset = 80 * dpr; // match CSS positioning
+  const border = 1.5 * dpr;
+
+  const x = canvasW - insetW - pad - border;
+  const y = canvasH - insetH - bottomOffset - border;
+
+  // Border + shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+  ctx.shadowBlur = 4 * dpr;
+  ctx.shadowOffsetY = 1 * dpr;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+  ctx.beginPath();
+  ctx.roundRect(x - border, y - border, insetW + border * 2, insetH + border * 2, 4 * dpr);
+  ctx.fill();
+  ctx.restore();
+
+  // White background (in case minimap has transparency)
+  ctx.fillStyle = '#f7f6f2';
+  ctx.beginPath();
+  ctx.roundRect(x, y, insetW, insetH, 3 * dpr);
+  ctx.fill();
+
+  // Clip to rounded rect and draw minimap
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, insetW, insetH, 3 * dpr);
+  ctx.clip();
+  ctx.drawImage(img, x, y, insetW, insetH);
+  ctx.restore();
+}
+
+/**
  * Crop a canvas data URL to the visible area defined by the aspect ratio.
  * The map canvas is full-size; letterbox bars mask the edges visually but
  * don't change the canvas. This replicates that crop for export.
@@ -892,6 +982,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
   const exportJpg = async () => {
     if (!map) return;
+    const dpr = window.devicePixelRatio || 1;
     let dataUrl = await captureCanvas('image/png'); // capture as PNG first to preserve alpha
     const mapCanvas = map.getCanvas();
     // Crop to aspect ratio before any compositing
@@ -907,9 +998,9 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       cx.drawImage(img, 0, 0);
       dataUrl = c.toDataURL('image/jpeg', 0.92);
     }
-    dataUrl = await compositeOverlay(dataUrl, overlay, 'image/jpeg', 0.92);
+    dataUrl = await compositeOverlay(dataUrl, overlay, 'image/jpeg', 0.92, dpr);
     if (overlay.showScaleBar) {
-      dataUrl = await compositeScaleBar(dataUrl, map, overlay.scaleUnit, 'image/jpeg', 0.92);
+      dataUrl = await compositeScaleBar(dataUrl, map, overlay.scaleUnit, 'image/jpeg', 0.92, dpr);
     }
     if (overlay.showCompass) {
       const img = await loadImage(dataUrl);
@@ -917,7 +1008,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       c.width = img.width; c.height = img.height;
       const cx = c.getContext('2d')!;
       cx.drawImage(img, 0, 0);
-      drawCompass(cx, c.width, map.getBearing());
+      drawCompass(cx, c.width, map.getBearing(), dpr);
       dataUrl = c.toDataURL('image/jpeg', 0.92);
     }
     if (legendEntries.length > 0) {
@@ -926,8 +1017,21 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       c.width = img.width; c.height = img.height;
       const cx = c.getContext('2d')!;
       cx.drawImage(img, 0, 0);
-      drawLegend(cx, c.width, c.height, legendEntries);
+      drawLegend(cx, c.width, c.height, legendEntries, dpr);
       dataUrl = c.toDataURL('image/jpeg', 0.92);
+    }
+    // Inset minimap
+    if (overlay.showMinimap) {
+      const minimapDataUrl = await captureMinimapCanvas(map);
+      if (minimapDataUrl) {
+        const img = await loadImage(dataUrl);
+        const c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        const cx = c.getContext('2d')!;
+        cx.drawImage(img, 0, 0);
+        await drawMinimap(cx, c.width, c.height, minimapDataUrl, dpr);
+        dataUrl = c.toDataURL('image/jpeg', 0.92);
+      }
     }
     // Attribution
     {
@@ -936,7 +1040,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       c.width = img.width; c.height = img.height;
       const cx = c.getContext('2d')!;
       cx.drawImage(img, 0, 0);
-      drawAttribution(cx, c.width, c.height);
+      drawAttribution(cx, c.width, c.height, dpr);
       dataUrl = c.toDataURL('image/jpeg', 0.92);
     }
     await downloadDataUrl(dataUrl, 'map-export.jpg');
@@ -944,6 +1048,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
   const exportPng = async () => {
     if (!map) return;
+    const dpr = window.devicePixelRatio || 1;
 
     // 1. Capture background only (hide feature layers)
     const style = map.getStyle();
@@ -973,7 +1078,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       c.width = bgImg.width; c.height = bgImg.height;
       const cx = c.getContext('2d')!;
       cx.drawImage(bgImg, 0, 0);
-      drawAttribution(cx, c.width, c.height);
+      drawAttribution(cx, c.width, c.height, dpr);
       bgDataUrl = c.toDataURL('image/png');
     }
     await downloadDataUrl(bgDataUrl, 'map-background.png');
@@ -1038,7 +1143,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
     }
 
     if (overlay.title || overlay.subtitle) {
-      const titleDataUrl = renderTitleOverlay(overlay, cw, ch);
+      const titleDataUrl = renderTitleOverlay(overlay, cw, ch, dpr);
       await downloadDataUrl(titleDataUrl, 'map-title.png');
     }
 
@@ -1048,7 +1153,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       sbCanvas.height = ch;
       const sbCtx = sbCanvas.getContext('2d')!;
       const center = map.getCenter();
-      drawScaleBar(sbCtx, cw, ch, map.getZoom(), center.lat, overlay.scaleUnit);
+      drawScaleBar(sbCtx, cw, ch, map.getZoom(), center.lat, overlay.scaleUnit, dpr);
       await downloadDataUrl(sbCanvas.toDataURL('image/png'), 'map-scalebar.png');
     }
 
@@ -1057,8 +1162,20 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       lgCanvas.width = cw;
       lgCanvas.height = ch;
       const lgCtx = lgCanvas.getContext('2d')!;
-      drawLegend(lgCtx, cw, ch, legendEntries);
+      drawLegend(lgCtx, cw, ch, legendEntries, dpr);
       await downloadDataUrl(lgCanvas.toDataURL('image/png'), 'map-legend.png');
+    }
+
+    if (overlay.showMinimap) {
+      const minimapDataUrl = await captureMinimapCanvas(map);
+      if (minimapDataUrl) {
+        const insetCanvas = document.createElement('canvas');
+        insetCanvas.width = cw;
+        insetCanvas.height = ch;
+        const insetCtx = insetCanvas.getContext('2d')!;
+        await drawMinimap(insetCtx, cw, ch, minimapDataUrl, dpr);
+        await downloadDataUrl(insetCanvas.toDataURL('image/png'), 'map-inset.png');
+      }
     }
 
     // 4. Restore everything
@@ -1387,12 +1504,27 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
         </label>
       </div>
 
+      {/* Inset map toggle */}
+      <div style={{ marginTop: 6 }}>
+        <label className="layer-toggle">
+          <input
+            type="checkbox"
+            checked={overlay.showMinimap}
+            onChange={(e) => updateField('showMinimap', e.target.checked)}
+          />
+          <span className="toggle-track">
+            <span className="toggle-thumb" />
+          </span>
+          <span className="toggle-label">Inset map</span>
+        </label>
+      </div>
+
       <div className="export-btn-row" style={{ marginTop: 18 }}>
         <button className="action-btn" onClick={exportJpg} disabled={!map}>
           Export JPG
         </button>
         <button className="action-btn" onClick={exportPng} disabled={!map}>
-          Export PNG ({2 + (overlay.title || overlay.subtitle ? 1 : 0) + (overlay.showScaleBar ? 1 : 0) + (legendEntries.length > 0 ? 1 : 0)} files)
+          Export PNG ({2 + (overlay.title || overlay.subtitle ? 1 : 0) + (overlay.showScaleBar ? 1 : 0) + (legendEntries.length > 0 ? 1 : 0) + (overlay.showMinimap ? 1 : 0)} files)
         </button>
       </div>
 

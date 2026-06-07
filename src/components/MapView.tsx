@@ -143,6 +143,16 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
     };
   }, [overlay?.scaleUnit, overlay?.showScaleBar, overlay?.showCompass]);
 
+  // Toggle minimap visibility
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const el = container.querySelector('#inset-minimap') as HTMLElement;
+    if (el) {
+      el.style.display = overlay?.showMinimap === false ? 'none' : '';
+    }
+  }, [overlay?.showMinimap]);
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -211,6 +221,87 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
     const navCtrl = new maplibregl.NavigationControl({ visualizePitch: true });
     map.addControl(navCtrl, 'top-right');
     map.addControl(new GlobeControl(), 'top-right');
+
+    // Inset minimap — a second maplibre instance synced to the main map
+    const minimapDiv = document.createElement('div');
+    minimapDiv.id = 'inset-minimap';
+    containerRef.current.appendChild(minimapDiv);
+
+    const minimapMap = new maplibregl.Map({
+      container: minimapDiv,
+      style: {
+        version: 8,
+        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+        sources: {
+          protomaps: {
+            type: 'vector',
+            tiles: ['https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=0a52651ea40e292b'],
+            maxzoom: 15,
+          },
+        },
+        layers: layers('protomaps', EDITORIAL_FLAVOR, { lang: 'en' }),
+      },
+      center: map.getCenter(),
+      zoom: Math.max(map.getZoom() - 5, 0),
+      interactive: false,
+      attributionControl: false,
+      preserveDrawingBuffer: true,
+    } as any);
+
+    // Sync minimap to main map movement
+    const syncMinimap = () => {
+      minimapMap.setCenter(map.getCenter());
+      minimapMap.setZoom(Math.max(map.getZoom() - 5, 0));
+    };
+    map.on('move', syncMinimap);
+
+    // Draw viewport indicator on minimap
+    minimapMap.on('load', () => {
+      minimapMap.addSource('viewport-box', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      minimapMap.addLayer({
+        id: 'viewport-box-fill',
+        type: 'fill',
+        source: 'viewport-box',
+        paint: {
+          'fill-color': '#4a90d9',
+          'fill-opacity': 0.12,
+        },
+      });
+      minimapMap.addLayer({
+        id: 'viewport-box-stroke',
+        type: 'line',
+        source: 'viewport-box',
+        paint: {
+          'line-color': '#4a90d9',
+          'line-width': 1.5,
+        },
+      });
+
+      const updateBox = () => {
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        const ring = [
+          [sw.lng, sw.lat],
+          [ne.lng, sw.lat],
+          [ne.lng, ne.lat],
+          [sw.lng, ne.lat],
+          [sw.lng, sw.lat],
+        ];
+        (minimapMap.getSource('viewport-box') as maplibregl.GeoJSONSource).setData({
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'Polygon', coordinates: [ring] },
+        });
+      };
+      updateBox();
+      map.on('move', updateBox);
+    });
+
+    (map as any)._minimapMap = minimapMap;
 
     // Add helpful tooltips and custom compass icon
     setTimeout(() => {
@@ -655,6 +746,8 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
     (window as any).__map = map;
 
     return () => {
+      minimapMap.remove();
+      minimapDiv.remove();
       map.remove();
       removeProtocol('pmtiles');
       mapRef.current = null;

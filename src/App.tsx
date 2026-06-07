@@ -28,6 +28,7 @@ export interface OverlaySettings {
   showScaleBar: boolean;
   scaleUnit: ScaleUnit;
   showCompass: boolean;
+  showMinimap: boolean;
 }
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
@@ -39,6 +40,7 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   showScaleBar: false,
   scaleUnit: 'metric',
   showCompass: false,
+  showMinimap: true,
 };
 
 function App() {

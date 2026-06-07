@@ -801,6 +801,26 @@ html, body, #root {
   left: var(--bar-left, 0px);
 }
 
+/* Inset minimap styling */
+#inset-minimap {
+  position: absolute;
+  bottom: calc(var(--bar-bottom, 0px) + 80px);
+  right: calc(var(--bar-right, 0px) + 10px);
+  width: 180px;
+  height: 130px;
+  border: 1.5px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+  overflow: hidden;
+}
+
+#inset-minimap .maplibregl-ctrl-attrib,
+#inset-minimap .maplibregl-ctrl-logo,
+#inset-minimap .maplibregl-control-container {
+  display: none !important;
+}
+
 /* Coordinates display */
 .coords-display {
   position: absolute;
