@@ -118,6 +118,13 @@ export function LegendBuilder({ entries, setEntries }: LegendBuilderProps) {
             />
             <div className="legend-entry-actions">
               <button
+                className="icon-btn icon-btn-danger"
+                onClick={() => removeEntry(entry.id)}
+                title="Remove"
+              >
+                ×
+              </button>
+              <button
                 className="icon-btn"
                 onClick={() => moveEntry(entry.id, -1)}
                 disabled={i === 0}
@@ -132,13 +139,6 @@ export function LegendBuilder({ entries, setEntries }: LegendBuilderProps) {
                 title="Move down"
               >
                 ↓
-              </button>
-              <button
-                className="icon-btn icon-btn-danger"
-                onClick={() => removeEntry(entry.id)}
-                title="Remove"
-              >
-                ×
               </button>
             </div>
           </div>

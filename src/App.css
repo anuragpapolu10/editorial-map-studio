@@ -421,9 +421,13 @@ html, body, #root {
   color: #333;
 }
 
+.icon-btn-danger {
+  color: #c0392b;
+}
+
 .icon-btn-danger:hover {
   background: rgba(192,57,43,0.15);
-  color: #c0392b;
+  color: #a93226;
 }
 
 .hint-bar {
@@ -898,6 +902,7 @@ html, body, #root {
 
 .legend-label-input {
   flex: 1;
+  min-width: 0;
   padding: 4px 8px;
   border: 1px solid #d1d1d1;
   border-radius: 3px;
