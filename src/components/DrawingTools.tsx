@@ -4,7 +4,7 @@ import { AnnotationStore } from '../annotations';
 import type { TextAnnotation } from '../annotations';
 import { ANNOTATION_LAYER_IDS } from './MapView';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
-import { hitTestAllTools, setPending, consumePending } from '../crossSelect';
+import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 
 import type { ActiveTool } from './Sidebar';
 
@@ -379,7 +379,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
       const features = queryLayers.length > 0
         ? map.queryRenderedFeatures(e.point, { layers: queryLayers })
         : [];
-      canvas.style.cursor = features.length > 0 ? 'grab' : 'crosshair';
+      canvas.style.cursor = features.length > 0 ? 'grab' : getCrossCursor(map, e.point, 'text');
     };
 
     const unsubSpace = subscribeSpace((held) => {

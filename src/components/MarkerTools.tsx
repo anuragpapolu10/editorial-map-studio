@@ -5,7 +5,7 @@ import type { MarkerAnnotation, MarkerShape } from '../markers';
 import { MARKER_LAYER_ID } from './MapView';
 import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
-import { hitTestAllTools, setPending, consumePending } from '../crossSelect';
+import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 
 interface MarkerToolsProps {
   map: maplibregl.Map | null;
@@ -270,7 +270,9 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
       const layer = map.getLayer(MARKER_LAYER_ID) ? MARKER_LAYER_ID : null;
       if (layer) {
         const features = map.queryRenderedFeatures(e.point, { layers: [layer] });
-        canvas.style.cursor = features.length > 0 ? 'grab' : 'crosshair';
+        canvas.style.cursor = features.length > 0 ? 'grab' : getCrossCursor(map, e.point, 'marker');
+      } else {
+        canvas.style.cursor = getCrossCursor(map, e.point, 'marker');
       }
     };
 

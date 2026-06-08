@@ -10,7 +10,7 @@ import {
 import { SHAPE_LAYER_IDS, SHAPE_HANDLE_LAYER_ID } from './MapView';
 import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
-import { hitTestAllTools, setPending, consumePending } from '../crossSelect';
+import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 import { snapTo45, snapSquare, snapCircle } from '../snap';
 
 interface ShapeToolsProps {
@@ -820,7 +820,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       const handleHit = hitTestHandle(e.point);
       if (handleHit) { canvas.style.cursor = 'grab'; return; }
       const hitId = hitTestShape(e.point);
-      canvas.style.cursor = hitId ? 'grab' : 'crosshair';
+      canvas.style.cursor = hitId ? 'grab' : getCrossCursor(map, e.point, activeTool!);
     };
 
     const unsubSpace = subscribeSpace((held) => {
@@ -829,7 +829,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
 
     map.on('mousemove', onMove);
     return () => { map.off('mousemove', onMove); unsubSpace(); canvas.style.cursor = ''; map.boxZoom.enable(); };
-  }, [map, isShapeTool, hitTestShape, hitTestHandle]);
+  }, [map, isShapeTool, activeTool, hitTestShape, hitTestHandle]);
 
   /* ---- Keyboard shortcuts ---- */
   useEffect(() => {

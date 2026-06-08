@@ -6,7 +6,7 @@ import type { StrokeStyle } from '../shapes';
 import { ARROW_SHAFT_LAYER_IDS, ARROW_CP_HANDLE_LAYER_ID } from './MapView';
 import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
-import { hitTestAllTools, setPending, consumePending } from '../crossSelect';
+import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 import { snapTo45 } from '../snap';
 
 interface ArrowToolsProps {
@@ -379,7 +379,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
         canvas.style.cursor = hitId === selectedId ? 'pointer' : 'grab';
         return;
       }
-      canvas.style.cursor = 'crosshair';
+      canvas.style.cursor = getCrossCursor(map, e.point, 'arrow');
     };
 
     const unsubSpace = subscribeSpace((held) => {

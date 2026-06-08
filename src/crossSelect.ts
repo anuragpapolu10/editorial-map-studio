@@ -23,6 +23,22 @@ export function consumePending(): { tool: ActiveTool; id: string } | null {
 }
 
 /** Hit test all tool layers and return the tool + element id, or null */
+/**
+ * Returns the cursor style based on whether a cross-selectable element is under the point.
+ * Call this when the tool would otherwise show 'crosshair' (empty space).
+ * Returns 'pointer' if a foreign element is hovered, otherwise 'crosshair'.
+ */
+export function getCrossCursor(
+  map: maplibregl.Map,
+  point: maplibregl.Point,
+  currentTool: ActiveTool,
+): 'pointer' | 'crosshair' {
+  const hit = hitTestAllTools(map, point);
+  if (hit && hit.tool !== currentTool) return 'pointer';
+  return 'crosshair';
+}
+
+/** Hit test all tool layers and return the tool + element id, or null */
 export function hitTestAllTools(
   map: maplibregl.Map,
   point: maplibregl.Point,
