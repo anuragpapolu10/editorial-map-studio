@@ -54,8 +54,8 @@ function nextId() { return `shp_${++idCounter}_${Date.now()}`; }
 const TOOLTIP_MESSAGES: Record<string, string> = {
   rectangle: 'Click and drag to draw a rectangle · Shift for square',
   ellipse: 'Click and drag to draw an ellipse · Shift for circle',
-  line: 'Click to place points · Shift to snap 45° · Right-click or double-click to finish · Click first point to close',
-  'line-drawing': 'Click to add points · Shift to snap 45° · Delete to undo last point · Right-click or double-click to finish',
+  line: 'Click to place points · Shift to snap 45° · Right-click to finish · Click first point to close',
+  'line-drawing': 'Click to add points · Shift to snap 45° · Delete to undo last point · Right-click to finish',
   selected: 'Drag to move · Drag handles to resize · Click Done to deselect · Alt+drag to duplicate · Ctrl+C / Ctrl+V to copy/paste · Delete to remove',
 };
 
