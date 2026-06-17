@@ -131,6 +131,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
   const [fill, setFill] = useState('#4a90d9');
   const [fillOpacity, setFillOpacity] = useState(0.15);
   const [rotation, setRotation] = useState(0);
+  const [showDirectionArrows, setShowDirectionArrows] = useState(false);
+  const [reverseDirection, setReverseDirection] = useState(false);
   const [tooltipMsg, setTooltipMsg] = useState('');
 
   // Drawing state refs
@@ -187,7 +189,12 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
 
     const features: GeoJSON.Feature[] = shps.map((s) => {
       const isClosed = s.type !== 'line';
-      const coords = [...s.vertices];
+      let coords = [...s.vertices];
+
+      // Reverse vertex order for direction arrows if requested
+      if (s.reverseDirection && s.showDirectionArrows) {
+        coords = [...coords].reverse();
+      }
 
       // Ensure closed ring for polygons
       if (isClosed && coords.length > 2) {
@@ -214,6 +221,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           fill: s.fill,
           fillOpacity: s.fillOpacity,
           selected: s.id === currentSelId,
+          showDirectionArrows: s.showDirectionArrows || false,
         },
       };
     });
@@ -897,6 +905,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
     setFill(shape.fill);
     setFillOpacity(shape.fillOpacity);
     setRotation(shape.rotation || 0);
+    setShowDirectionArrows(shape.showDirectionArrows || false);
+    setReverseDirection(shape.reverseDirection || false);
   };
 
   const applyStyle = (changes: Partial<ShapeAnnotation>) => {
@@ -1125,6 +1135,42 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                 className="style-slider"
               />
               <span className="style-value">{rotation}°</span>
+            </div>
+          )}
+
+          {/* Direction arrows (for lines and polygons) */}
+          {selectedShape && (selectedShape.type === 'line' || selectedShape.type === 'polygon') && (
+            <div style={{ marginTop: 6 }}>
+              <label className="layer-toggle">
+                <input
+                  type="checkbox"
+                  checked={showDirectionArrows}
+                  onChange={(e) => {
+                    setShowDirectionArrows(e.target.checked);
+                    applyStyle({ showDirectionArrows: e.target.checked });
+                  }}
+                />
+                <span className="toggle-track">
+                  <span className="toggle-thumb" />
+                </span>
+                <span className="toggle-label">Direction arrows</span>
+              </label>
+              {showDirectionArrows && (
+                <label className="layer-toggle" style={{ marginTop: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={reverseDirection}
+                    onChange={(e) => {
+                      setReverseDirection(e.target.checked);
+                      applyStyle({ reverseDirection: e.target.checked });
+                    }}
+                  />
+                  <span className="toggle-track">
+                    <span className="toggle-thumb" />
+                  </span>
+                  <span className="toggle-label">Reverse direction</span>
+                </label>
+              )}
             </div>
           )}
 

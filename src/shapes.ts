@@ -12,6 +12,8 @@ export interface ShapeAnnotation {
   strokeStyle: StrokeStyle;
   fill: string;
   fillOpacity: number;
+  showDirectionArrows?: boolean;
+  reverseDirection?: boolean;
 }
 
 type Action =

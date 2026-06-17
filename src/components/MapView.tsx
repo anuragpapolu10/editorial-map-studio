@@ -412,6 +412,45 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
           },
         });
 
+        // Direction arrow icon (SDF chevron for line-placed symbols)
+        if (!map.hasImage('direction-arrow')) {
+          const sz = 16;
+          const canvas = document.createElement('canvas');
+          canvas.width = sz;
+          canvas.height = sz;
+          const ctx = canvas.getContext('2d')!;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.moveTo(4, 2);
+          ctx.lineTo(13, 8);
+          ctx.lineTo(4, 14);
+          ctx.lineTo(6, 8);
+          ctx.closePath();
+          ctx.fill();
+          const imgData = ctx.getImageData(0, 0, sz, sz);
+          map.addImage('direction-arrow', imgData, { sdf: true });
+        }
+
+        // Direction arrows along lines/polygons
+        map.addLayer({
+          id: 'shapes-direction-arrows',
+          type: 'symbol',
+          source: 'shapes',
+          filter: ['==', ['get', 'showDirectionArrows'], true],
+          layout: {
+            'symbol-placement': 'line',
+            'symbol-spacing': 80,
+            'icon-image': 'direction-arrow',
+            'icon-size': ['interpolate', ['linear'], ['get', 'strokeWidth'], 1, 0.8, 4, 1.4, 8, 2.2, 12, 3],
+            'icon-allow-overlap': true,
+            'icon-rotation-alignment': 'map',
+          },
+          paint: {
+            'icon-color': ['get', 'stroke'],
+            'icon-opacity': 0.8,
+          },
+        });
+
         // Selection outline (dashed blue)
         map.addLayer({
           id: 'shapes-selection',
