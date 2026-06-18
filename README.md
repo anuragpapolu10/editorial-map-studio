@@ -30,7 +30,7 @@ These aren't decorations — they're what separates a useful map from a confusin
 
 - **Basemap** — clean, publication-ready cartography with Protomaps vector tiles. Toggle satellite imagery, terrain relief, water, roads, buildings, boundaries, parks, and labels (neighborhoods, cities, states, islands, countries, water, roads) independently. Per-layer opacity controls.
 - **Text labels** — place, style, and rotate text annotations on the map. Bold, italic, font size, color, background toggle.
-- **Markers** — drop pins, circles, squares, and triangles with customizable color and size.
+- **Markers** — drop pins, circles, squares, and triangles with customizable color and size. Custom color picker with hex input on all drawing tools.
 - **Arrows** — freeform curved arrows with click-on-shaft bend points, Catmull-Rom spline curves, adjustable stroke/dash styles, bidirectional toggle, and arrowhead size slider.
 - **Shapes** — rectangles, ellipses, lines, and polygons with stroke color/width/dash, fill color/opacity, and rotation. Drag corner/edge handles to resize, drag vertices to reshape.
 - **Copy/paste & duplicate** — Ctrl+C/V to copy and paste any element. Alt+drag to duplicate and place in one gesture.
@@ -49,6 +49,7 @@ These aren't decorations — they're what separates a useful map from a confusin
 - **Undo/redo** — full undo/redo history for all drawing tools.
 - **Keyboard shortcuts** — spacebar to pan, Shift for 45-degree snap, Delete to remove, Escape to deselect, Ctrl+C/V copy/paste.
 - **Cross-tool selection** — click any element while a different tool is active to auto-switch and select it.
+- **Search with pin** — search for places, landmarks, or businesses and a temporary pin marks the result on the map. Dismiss it with the × button or search again.
 
 ## Planned features
 

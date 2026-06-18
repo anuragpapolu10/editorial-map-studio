@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type maplibregl from 'maplibre-gl';
+import maplibregl from 'maplibre-gl';
+import type { Map as MLMap } from 'maplibre-gl';
 
 interface SearchBarProps {
-  map: maplibregl.Map | null;
+  map: MLMap | null;
 }
 
 interface PhotonFeature {
@@ -35,7 +36,7 @@ function zoomForType(p: PhotonFeature['properties']): number {
   if (['county', 'district'].includes(val)) return 9;
   if (['city', 'town'].includes(val)) return 12;
   if (['village', 'hamlet', 'suburb', 'neighbourhood'].includes(val)) return 14;
-  return 12;
+  return 15;
 }
 
 export function SearchBar({ map }: SearchBarProps) {
@@ -45,6 +46,7 @@ export function SearchBar({ map }: SearchBarProps) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pinRef = useRef<maplibregl.Marker | null>(null);
 
   const search = useCallback(async (q: string) => {
     if (q.length < 2) {
@@ -77,6 +79,31 @@ export function SearchBar({ map }: SearchBarProps) {
     timerRef.current = setTimeout(() => search(value), 250);
   };
 
+  const clearPin = useCallback(() => {
+    if (pinRef.current) {
+      pinRef.current.remove();
+      pinRef.current = null;
+    }
+  }, []);
+
+  const dropPin = useCallback((lng: number, lat: number) => {
+    if (!map) return;
+    clearPin();
+
+    const el = document.createElement('div');
+    el.className = 'search-pin';
+
+    const dismiss = document.createElement('button');
+    dismiss.className = 'search-pin-dismiss';
+    dismiss.textContent = '×';
+    dismiss.onclick = (e) => { e.stopPropagation(); clearPin(); };
+    el.appendChild(dismiss);
+
+    pinRef.current = new maplibregl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .addTo(map);
+  }, [map, clearPin]);
+
   const flyTo = (feature: PhotonFeature) => {
     if (!map) return;
     const [lng, lat] = feature.geometry.coordinates;
@@ -95,6 +122,7 @@ export function SearchBar({ map }: SearchBarProps) {
       });
     }
 
+    dropPin(lng, lat);
     setQuery(formatResult(feature.properties));
     setShowDropdown(false);
     setResults([]);
