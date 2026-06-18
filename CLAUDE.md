@@ -8,6 +8,7 @@ Keep this project **light and simple**.
 
 ## Tech Stack
 - **Vite + React + TypeScript**
+- **react-colorful** — lightweight color picker component (~2KB)
 - **MapLibre GL JS v5.24.0** — vector map renderer
 - **Protomaps** — vector tiles via API (key: `0a52651ea40e292b`, CORS origins: localhost, editorialmapstudio.com, editorial-map-studio.vercel.app)
 - **AWS Terrain Tiles** — hillshade/relief rendering
@@ -75,6 +76,7 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - `src/components/ArrowTools.tsx` — freeform arrow tool (click-drag to draw, click-shaft to add bends, drag handles to reshape, bidirectional toggle, head scale slider, copy/paste, alt+drag duplicate)
 - `src/components/LayerToggles.tsx` — layer visibility toggles with sub-groups
 - `src/components/ExportTools.tsx` — all export logic (JPG, PNG, SVG, GeoJSON), title/subtitle overlay, scale bar, compass, legend, inset minimap rendering, aspect ratio crop, DPR scaling, Save As dialog
+- `src/components/ColorPickerPopover.tsx` — reusable custom color picker popover using react-colorful (HexColorPicker + hex text input, fixed positioning to escape sidebar overflow)
 - `src/components/LegendBuilder.tsx` — sidebar legend builder UI
 - `src/annotations.ts` — text label data store with undo/redo
 - `src/shapes.ts` — shape data store with undo/redo, geometry helpers (getCentroid, rotateVertices, translateVertices, makeRectVertices, makeEllipseVertices)
@@ -161,7 +163,8 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - Sidebar header: "Editorial Map Studio" / "CLEAN & SIMPLE MAPS"
 - Sidebar footer: "Designed by Anurag Papolu · Feedback · GitHub" — feedback link (muted green `#6b9a7b`) opens Tally form, GitHub link (purple `#8b5cf6`) opens [github.com/anuragpapolu10/editorial-map-studio](https://github.com/anuragpapolu10/editorial-map-studio)
 - Favicon: folded map icon (tri-fold paper with red location dot) in editorial palette
-- Legend colors: 6 swatches only (black, grey, white, red, green, blue) — matches marker palette
+- Legend colors: 6 swatches + custom color picker (rainbow circle) — matches marker palette
+- **Custom color picker**: rainbow conic-gradient circle next to every color swatch row (7 locations across 5 files). Opens a `react-colorful` HexColorPicker popover with hex text input. Uses `position: fixed` + `getBoundingClientRect()` to escape sidebar's `overflow-y: auto`. Reusable `ColorPickerPopover` component.
 - Scale bar unit selector: km / mi / nmi toggle buttons with a thin separator line after nmi
 - PNG export button shows dynamic file count based on active overlays
 - Export section order: aspect ratio presets → title input → subtitle input → alignment → title size → subtitle size → scale bar toggle/units → compass toggle → inset map toggle → export buttons → experimental section (SVG, GeoJSON with hover tooltips)

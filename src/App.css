@@ -633,6 +633,107 @@ html, body, #root {
   box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #333;
 }
 
+.color-swatch-custom {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #ccc;
+  cursor: pointer;
+  padding: 0;
+  background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  transition: transform 0.1s;
+  overflow: hidden;
+}
+
+.color-swatch-custom:hover {
+  transform: scale(1.15);
+}
+
+.color-swatch-custom.color-swatch-active {
+  border-color: #333 !important;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #333;
+}
+
+.color-swatch-custom-inner {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+}
+
+.color-swatch-custom input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.color-picker-popover {
+  position: fixed;
+  z-index: 1000;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.1);
+  padding: 10px;
+  width: 200px;
+}
+
+.color-picker-popover .react-colorful {
+  width: 100% !important;
+  height: 140px !important;
+}
+
+.color-picker-popover .react-colorful__saturation {
+  border-radius: 5px 5px 0 0;
+}
+
+.color-picker-popover .react-colorful__hue {
+  height: 10px;
+  border-radius: 0 0 5px 5px;
+}
+
+.color-picker-popover .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+}
+
+.color-picker-hex-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.color-picker-hex-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.color-picker-hex-input {
+  flex: 1;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  padding: 4px 6px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #333;
+  letter-spacing: 0.02em;
+  box-sizing: border-box;
+}
+
+.color-picker-hex-input:focus {
+  outline: none;
+  border-color: #888;
+}
+
 /* Marker shape picker */
 .marker-shape-picker {
   display: flex;

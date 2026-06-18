@@ -1,5 +1,6 @@
 import type { LegendEntry, LegendSymbol } from '../legend';
 import { createLegendEntry } from '../legend';
+import { ColorPickerPopover } from './ColorPickerPopover';
 
 interface LegendBuilderProps {
   entries: LegendEntry[];
@@ -172,6 +173,11 @@ export function LegendBuilder({ entries, setEntries }: LegendBuilderProps) {
                   onClick={() => updateEntry(entry.id, { color: c })}
                 />
               ))}
+              <ColorPickerPopover
+                color={entry.color}
+                onChange={(v) => updateEntry(entry.id, { color: v })}
+                presetColors={COLORS}
+              />
             </div>
           </div>
 
@@ -214,6 +220,11 @@ export function LegendBuilder({ entries, setEntries }: LegendBuilderProps) {
                       onClick={() => updateEntry(entry.id, { strokeColor: c })}
                     />
                   ))}
+                  <ColorPickerPopover
+                    color={entry.strokeColor}
+                    onChange={(v) => updateEntry(entry.id, { strokeColor: v })}
+                    presetColors={COLORS}
+                  />
                 </div>
               </div>
               <div className="legend-entry-row">

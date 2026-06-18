@@ -12,6 +12,7 @@ import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
 import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 import { snapTo45, snapSquare, snapCircle } from '../snap';
+import { ColorPickerPopover } from './ColorPickerPopover';
 
 interface ShapeToolsProps {
   map: maplibregl.Map | null;
@@ -1026,6 +1027,11 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                   title={c.label}
                 />
               ))}
+              <ColorPickerPopover
+                color={stroke}
+                onChange={(v) => { setStroke(v); applyStyle({ stroke: v }); }}
+                presetColors={COLORS}
+              />
             </div>
           </div>
 
@@ -1084,6 +1090,11 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                       title={c.label}
                     />
                   ))}
+                  <ColorPickerPopover
+                    color={fill}
+                    onChange={(v) => { setFill(v); applyStyle({ fill: v }); }}
+                    presetColors={COLORS}
+                  />
                 </div>
               </div>
 

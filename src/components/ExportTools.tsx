@@ -1527,6 +1527,9 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           Export PNG ({2 + (overlay.title || overlay.subtitle ? 1 : 0) + (overlay.showScaleBar ? 1 : 0) + (legendEntries.length > 0 ? 1 : 0) + (overlay.showMinimap ? 1 : 0)} files)
         </button>
       </div>
+      <p style={{ margin: '8px 0 0', fontSize: 11, color: '#888', lineHeight: 1.4 }}>
+        Exports may take a minute to gather all map tiles and render. Please be patient.
+      </p>
 
       <div className="export-experimental-label">Experimental</div>
       <div className="export-btn-row" style={{ marginTop: 6 }}>

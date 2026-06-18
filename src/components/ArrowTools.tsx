@@ -8,6 +8,7 @@ import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
 import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 import { snapTo45 } from '../snap';
+import { ColorPickerPopover } from './ColorPickerPopover';
 
 interface ArrowToolsProps {
   map: maplibregl.Map | null;
@@ -529,6 +530,11 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
                   title={c.label}
                 />
               ))}
+              <ColorPickerPopover
+                color={stroke}
+                onChange={(v) => { setStroke(v); applyStyle({ stroke: v }); }}
+                presetColors={COLORS}
+              />
             </div>
           </div>
 

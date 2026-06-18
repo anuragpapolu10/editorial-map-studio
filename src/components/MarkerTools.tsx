@@ -6,6 +6,7 @@ import { MARKER_LAYER_ID } from './MapView';
 import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
 import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
+import { ColorPickerPopover } from './ColorPickerPopover';
 
 interface MarkerToolsProps {
   map: maplibregl.Map | null;
@@ -420,6 +421,11 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
                   title={c.label}
                 />
               ))}
+              <ColorPickerPopover
+                color={color}
+                onChange={(v) => { setColor(v); applyStyle({ color: v }); }}
+                presetColors={COLORS}
+              />
             </div>
           </div>
 

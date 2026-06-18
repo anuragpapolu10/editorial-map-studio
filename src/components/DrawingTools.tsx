@@ -7,6 +7,7 @@ import { isSpaceHeld, subscribeSpace } from '../spacebar';
 import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
 
 import type { ActiveTool } from './Sidebar';
+import { ColorPickerPopover } from './ColorPickerPopover';
 
 interface DrawingToolsProps {
   map: maplibregl.Map | null;
@@ -626,6 +627,11 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
                   title={c.label}
                 />
               ))}
+              <ColorPickerPopover
+                color={color}
+                onChange={(v) => { setColor(v); applyStyle({ color: v }); }}
+                presetColors={COLORS}
+              />
             </div>
           </div>
 
