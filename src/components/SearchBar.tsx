@@ -1,14 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { Map as MLMap } from 'maplibre-gl';
+import type { ShapeStore, ShapeAnnotation } from '../shapes';
+import type { ActiveTool } from './Sidebar';
+import { setPending } from '../crossSelect';
 
 interface SearchBarProps {
   map: MLMap | null;
+  shapeStore: ShapeStore;
+  setActiveTool: (tool: ActiveTool) => void;
 }
 
 interface PhotonFeature {
   geometry: { coordinates: [number, number] };
   properties: {
+    osm_type?: string;
+    osm_id?: number;
     name?: string;
     city?: string;
     state?: string;
@@ -39,7 +46,7 @@ function zoomForType(p: PhotonFeature['properties']): number {
   return 15;
 }
 
-export function SearchBar({ map }: SearchBarProps) {
+export function SearchBar({ map, shapeStore, setActiveTool }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PhotonFeature[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -86,7 +93,55 @@ export function SearchBar({ map }: SearchBarProps) {
     }
   }, []);
 
-  const dropPin = useCallback((lng: number, lat: number) => {
+  const fetchBoundary = useCallback(async (osmType: string, osmId: number): Promise<GeoJSON.Geometry | null> => {
+    const typeMap: Record<string, string> = { R: 'R', W: 'W', N: 'N' };
+    const t = typeMap[osmType];
+    if (!t) return null;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/details?osmtype=${t}&osmid=${osmId}&polygon_geojson=1&format=json`,
+        { headers: { 'User-Agent': 'EditorialMapStudio/1.0' } }
+      );
+      const data = await res.json();
+      const geom = data?.geometry;
+      if (geom && (geom.type === 'Polygon' || geom.type === 'MultiPolygon')) return geom;
+    } catch { /* ignore */ }
+    return null;
+  }, []);
+
+  const addBoundaryShape = useCallback((geometry: GeoJSON.Geometry) => {
+    const rings: [number, number][][] = [];
+    if (geometry.type === 'Polygon') {
+      rings.push(geometry.coordinates[0] as [number, number][]);
+    } else if (geometry.type === 'MultiPolygon') {
+      for (const poly of geometry.coordinates) {
+        rings.push(poly[0] as [number, number][]);
+      }
+    }
+    let lastId = '';
+    for (const ring of rings) {
+      const shape: ShapeAnnotation = {
+        id: crypto.randomUUID(),
+        type: 'polygon',
+        vertices: ring,
+        rotation: 0,
+        stroke: '#c0392b',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        fill: '#c0392b',
+        fillOpacity: 0.1,
+      };
+      shapeStore.add(shape);
+      lastId = shape.id;
+    }
+    clearPin();
+    if (lastId) {
+      setPending('line', lastId);
+      setActiveTool('line');
+    }
+  }, [shapeStore, clearPin, setActiveTool]);
+
+  const dropPin = useCallback((lng: number, lat: number, feature: PhotonFeature) => {
     if (!map) return;
     clearPin();
 
@@ -102,7 +157,21 @@ export function SearchBar({ map }: SearchBarProps) {
     pinRef.current = new maplibregl.Marker({ element: el })
       .setLngLat([lng, lat])
       .addTo(map);
-  }, [map, clearPin]);
+
+    const osmType = feature.properties.osm_type;
+    const osmId = feature.properties.osm_id;
+    if (osmType && osmId) {
+      fetchBoundary(osmType, osmId).then((geom) => {
+        if (geom && pinRef.current) {
+          const btn = document.createElement('button');
+          btn.className = 'search-pin-boundary';
+          btn.textContent = 'Add boundary';
+          btn.onclick = (e) => { e.stopPropagation(); addBoundaryShape(geom); };
+          el.appendChild(btn);
+        }
+      });
+    }
+  }, [map, clearPin, fetchBoundary, addBoundaryShape]);
 
   const flyTo = (feature: PhotonFeature) => {
     if (!map) return;
@@ -122,7 +191,7 @@ export function SearchBar({ map }: SearchBarProps) {
       });
     }
 
-    dropPin(lng, lat);
+    dropPin(lng, lat, feature);
     setQuery(formatResult(feature.properties));
     setShowDropdown(false);
     setResults([]);

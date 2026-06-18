@@ -193,6 +193,25 @@ html, body, #root {
 .search-pin-dismiss:hover {
   background: #c0392b;
 }
+.search-pin-boundary {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: #fff;
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.search-pin-boundary:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
 
 /* Layer toggles */
 .layer-toggles {

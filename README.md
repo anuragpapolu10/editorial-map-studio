@@ -50,6 +50,7 @@ These aren't decorations — they're what separates a useful map from a confusin
 - **Keyboard shortcuts** — spacebar to pan, Shift for 45-degree snap, Delete to remove, Escape to deselect, Ctrl+C/V copy/paste.
 - **Cross-tool selection** — click any element while a different tool is active to auto-switch and select it.
 - **Search with pin** — search for places, landmarks, or businesses and a temporary pin marks the result on the map. Dismiss it with the × button or search again.
+- **Add boundary from search** — when searching for a city, country, state, or park, click "Add boundary" on the pin to trace its outline onto the map as an editable polygon. Customize stroke, fill, opacity, and dash style just like any other shape.
 
 ## Planned features
 

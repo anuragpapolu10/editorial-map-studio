@@ -74,6 +74,7 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - `src/components/ShapeTools.tsx` — rectangle/ellipse/line/polygon tool (draw, select, drag, style, rotation, copy/paste, alt+drag duplicate)
 - `src/components/MarkerTools.tsx` — marker placement tool (place, select, drag, style, copy/paste, alt+drag duplicate)
 - `src/components/ArrowTools.tsx` — freeform arrow tool (click-drag to draw, click-shaft to add bends, drag handles to reshape, bidirectional toggle, head scale slider, copy/paste, alt+drag duplicate)
+- `src/components/SearchBar.tsx` — place search (Photon geocoder), temporary pin with dismiss, "Add boundary" button (fetches polygon from Nominatim and adds to ShapeStore)
 - `src/components/LayerToggles.tsx` — layer visibility toggles with sub-groups
 - `src/components/ExportTools.tsx` — all export logic (JPG, PNG, SVG, GeoJSON), title/subtitle overlay, scale bar, compass, legend, inset minimap rendering, aspect ratio crop, DPR scaling, Save As dialog
 - `src/components/ColorPickerPopover.tsx` — reusable custom color picker popover using react-colorful (HexColorPicker + hex text input, fixed positioning to escape sidebar overflow)
@@ -117,6 +118,9 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - [x] **Globe projection**: toggle button (top-right controls) switches between flat Mercator and globe view with auto-tilt. Sky/atmosphere configured with warm off-white (`#f0efeb` sky, `#e8e5de` horizon) so globe background isn't black in exports.
 - [x] **Satellite imagery**: Esri World Imagery raster tiles (free, no API key). Toggle + opacity slider in Layer Toggles. Default opacity 20%. Layer sits below hillshade and all vector layers. Slight desaturation (`raster-saturation: -0.3`) for editorial tone.
 - [x] **Per-layer opacity**: every layer group has a chevron dropdown with an opacity slider (0–100%). Sets appropriate paint property per layer type (`fill-opacity`, `line-opacity`, `text-opacity`, `hillshade-exaggeration`, `raster-opacity`).
+- [x] **Search with pin**: searching for a place drops a temporary red pin with dismiss ×. Pin clears on next search or dismiss.
+- [x] **Add boundary from search**: when a search result has an OSM boundary (cities, countries, states, parks), an "Add boundary" button appears on the pin. Clicking it fetches the polygon from Nominatim (`polygon_geojson=1`) and adds it to ShapeStore as a polygon. Handles MultiPolygon (multiple rings). Auto-switches to Line/Polygon tool with the shape selected for immediate styling.
+- [x] **Custom color picker**: rainbow conic-gradient circle on all 7 color swatch rows. Opens a react-colorful HexColorPicker popover with hex text input. Uses `position: fixed` to escape sidebar overflow.
 
 ### Aspect Ratio Presets
 - Presets: Free (no crop), 3:2 (landscape), 1:1 (square), 3:4 (portrait), 9:16 (phone/stories)
