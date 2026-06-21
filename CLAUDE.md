@@ -83,6 +83,8 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - `src/shapes.ts` — shape data store with undo/redo, geometry helpers (getCentroid, rotateVertices, translateVertices, makeRectVertices, makeEllipseVertices)
 - `src/markers.ts` — marker data store with undo/redo, SDF icon generation
 - `src/arrows.ts` — arrow data store with undo/redo, Catmull-Rom spline math, GeoJSON generation
+- `src/dataStore.ts` — data tab state, CSV parsing, column auto-detection, geocoding (Nominatim), GeoJSON generation
+- `src/components/DataTools.tsx` — data tab UI, MapLibre circle+symbol layer management, geocode flow, label repositioning
 - `src/crossSelect.ts` — cross-tool selection: `hitTestAllTools()`, `setPending()`, `consumePending()`
 - `src/snap.ts` — Shift-key constraint helpers: `snapTo45()`, `snapSquare()`, `snapCircle()`. All functions correct for lng/lat distortion using `cos(latitude)` so shapes look correct on screen
 - `src/spacebar.ts` — global spacebar state tracker
@@ -143,6 +145,24 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - [x] **DPR-aware export overlays** — all export drawing functions (title, subtitle, scale bar, compass, legend, attribution, inset minimap) scale by `window.devicePixelRatio` so overlays render at correct size on retina displays.
 - [x] **Aspect ratio export cropping** — JPG and PNG exports crop the captured canvas to the selected aspect ratio (3:2, 1:1, 3:4, 9:16) before compositing overlays. PNG overlay layers (title, scale bar, legend, inset) are also rendered at the cropped dimensions.
 - [x] **Inset minimap** — a second MapLibre GL instance positioned bottom-right above the scale bar. Shows the same editorial basemap zoomed out 5 levels, synced to main map center. Blue rectangle shows the main map's viewport bounds. Toggle in Export panel ("Inset map"), on by default. Requires `preserveDrawingBuffer: true` for export capture. Composited onto JPG exports; saved as separate `map-inset.png` in PNG export. Custom implementation (no plugin) using the same maplibre-gl instance to avoid version conflicts.
+
+### Data Tab (Phase 1 — Points & Bubbles)
+- [x] **CSV paste import** — textarea, "Load data" button, "Clear data" with confirmation, "Try sample" pre-fills example CSV
+- [x] **Column auto-detection** — auto-picks lat/lng/value/label columns from common names (lat, latitude, lng, longitude, value, count, population, name, city, county, etc.)
+- [x] **Point visualization** — MapLibre circle layer with configurable color (custom color picker), size, opacity
+- [x] **Bubble visualization** — proportional circles sized by value column, with min/max radius sliders
+- [x] **Labels & values** — toggle-able text labels and formatted values on each point. Uses MapLibre symbol layer with `text-radial-offset` for positioning. Click a label on the map to cycle its anchor position (top/right/bottom/left).
+- [x] **Dynamic bubble label offset** — in bubble mode, `text-radial-offset` scales proportionally with bubble radius (`radius_px / label_size + 0.4`) so labels clear big bubbles without floating too far from small ones
+- [x] **Value formatting** — commas toggle (1000 → 1,000), prefix input (e.g. "$", "£"), suffix input (e.g. " km²", "%"). Applied via pre-computed `formattedValue` in GeoJSON properties since MapLibre expressions can't do `toLocaleString`.
+- [x] **Auto-geocoding** — when CSV has no lat/lng columns, prompts "Geocode using the {column} column?" with a "Narrow search" text field for region bias (e.g. "UK", "Brazil"). Uses Nominatim (OpenStreetMap) with 1.1s delays between requests. Deduplicates location names to minimize API calls. Shows progress bar during geocoding. Skipped rows shown with "invalid coordinates" badge.
+- [x] **Zoom to data** — auto-fits map bounds after loading points or geocoding
+- [x] **Row count indicator** — "10 points loaded" or "9 points loaded, 1 skipped" with details on skipped rows
+- [x] **Tab preservation** — Drawing and Data tabs use `display: none` (not conditional rendering) so component state persists when switching tabs
+
+Key files:
+- `src/dataStore.ts` — DataState interface, CSV parsing, column auto-detection, `pointsToGeoJSON()`, `extractPoints()`, geocoding (`geocodeLocations()`, Nominatim API)
+- `src/components/DataTools.tsx` — Data tab UI, MapLibre layer management (circle + symbol layers), label click-to-reposition, geocode flow
+- `src/components/Sidebar.tsx` — Tab switching (Drawing/Data), ActiveTool management
 
 ### Overlay State Architecture
 - `OverlaySettings` interface in `App.tsx` holds title, subtitle, sizes, alignment, scale bar toggle, scale unit, compass toggle, minimap toggle — all lifted to App level

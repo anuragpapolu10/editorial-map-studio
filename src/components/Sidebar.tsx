@@ -8,6 +8,7 @@ import { MarkerTools } from './MarkerTools';
 import { ArrowTools } from './ArrowTools';
 import { ExportTools } from './ExportTools';
 import { LegendBuilder } from './LegendBuilder';
+import { DataTools } from './DataTools';
 import { AnnotationStore } from '../annotations';
 import { ShapeStore } from '../shapes';
 import { MarkerStore } from '../markers';
@@ -16,6 +17,8 @@ import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
 
 export type ActiveTool = null | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line';
+
+type SidebarTab = 'drawing' | 'data';
 
 interface SidebarProps {
   map: maplibregl.Map | null;
@@ -33,6 +36,7 @@ interface SidebarProps {
 
 export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowStore, overlay, setOverlay, legendEntries, setLegendEntries, aspectRatio, setAspectRatio }: SidebarProps) {
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const [tab, setTab] = useState<SidebarTab>('drawing');
 
   return (
     <div className="sidebar">
@@ -46,42 +50,63 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
         <SearchBar map={map} shapeStore={shapeStore} setActiveTool={setActiveTool} />
       </div>
 
-      <div className="sidebar-section">
-        <h2>Layer Toggles</h2>
-        <LayerToggles map={map} />
+      <div className="sidebar-tab-bar">
+        <button
+          className={`sidebar-tab-btn ${tab === 'drawing' ? 'active' : ''}`}
+          onClick={() => setTab('drawing')}
+        >
+          Drawing
+        </button>
+        <button
+          className={`sidebar-tab-btn ${tab === 'data' ? 'active' : ''}`}
+          onClick={() => setTab('data')}
+        >
+          Data
+        </button>
       </div>
 
-      <div className="sidebar-section">
-        <h2>Drawing Tools</h2>
-        <DrawingTools
-          map={map}
-          store={annotationStore}
-          activeTool={activeTool}
-          setActiveTool={setActiveTool}
-        />
-        <MarkerTools
-          map={map}
-          store={markerStore}
-          activeTool={activeTool}
-          setActiveTool={setActiveTool}
-        />
-        <ArrowTools
-          map={map}
-          store={arrowStore}
-          activeTool={activeTool}
-          setActiveTool={setActiveTool}
-        />
-        <ShapeTools
-          map={map}
-          store={shapeStore}
-          activeTool={activeTool}
-          setActiveTool={setActiveTool}
-        />
+      <div style={tab !== 'drawing' ? { display: 'none' } : undefined}>
+        <div className="sidebar-section">
+          <h2>Layer Toggles</h2>
+          <LayerToggles map={map} />
+        </div>
+
+        <div className="sidebar-section">
+          <h2>Drawing Tools</h2>
+          <DrawingTools
+            map={map}
+            store={annotationStore}
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+          />
+          <MarkerTools
+            map={map}
+            store={markerStore}
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+          />
+          <ArrowTools
+            map={map}
+            store={arrowStore}
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+          />
+          <ShapeTools
+            map={map}
+            store={shapeStore}
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+          />
+        </div>
+
+        <div className="sidebar-section">
+          <h2>Legend</h2>
+          <LegendBuilder entries={legendEntries} setEntries={setLegendEntries} />
+        </div>
       </div>
 
-      <div className="sidebar-section">
-        <h2>Legend</h2>
-        <LegendBuilder entries={legendEntries} setEntries={setLegendEntries} />
+      <div className="sidebar-section" style={tab !== 'data' ? { display: 'none' } : undefined}>
+        <DataTools map={map} />
       </div>
 
       <div className="sidebar-section">

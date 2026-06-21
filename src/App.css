@@ -1276,3 +1276,379 @@ html, body, #root {
   max-width: 380px;
   line-height: 1.4;
 }
+
+/* Sidebar Tab Bar */
+.sidebar-tab-bar {
+  display: flex;
+  padding: 0 20px;
+  gap: 0;
+  border-bottom: 1px solid #f0efeb;
+}
+
+.sidebar-tab-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #aaa;
+  letter-spacing: 0.3px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.sidebar-tab-btn:hover {
+  color: #666;
+}
+
+.sidebar-tab-btn.active {
+  color: #333;
+  border-bottom-color: #333;
+}
+
+/* Data Tools */
+.data-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.data-paste-area {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+  color: #333;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+.data-paste-area:focus {
+  border-color: #999;
+}
+
+.data-paste-area::placeholder {
+  color: #aaa;
+}
+
+.data-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.data-btn {
+  padding: 6px 12px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: #555;
+  transition: all 0.15s;
+}
+
+.data-btn:hover {
+  border-color: #999;
+  color: #333;
+}
+
+.data-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.data-btn-primary {
+  background: #333;
+  border-color: #333;
+  color: #fff;
+}
+
+.data-btn-primary:hover {
+  background: #444;
+  border-color: #444;
+}
+
+.data-row-count {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.data-skipped-list {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #fef3f2;
+  border: 1px solid #fecdc9;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-skipped-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.data-skipped-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.data-skipped-reason {
+  color: #b42318;
+  flex-shrink: 0;
+}
+
+.data-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #f7f6f2;
+  border-radius: 4px;
+}
+
+.data-columns-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8c8c8c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.data-col-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-col-label {
+  font-size: 12px;
+  color: #555;
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.data-col-select {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #d1d1d1;
+  border-radius: 3px;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: #333;
+  background: #fff;
+  outline: none;
+}
+
+.data-col-select:focus {
+  border-color: #999;
+}
+
+.data-viz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-viz-types {
+  display: flex;
+  gap: 6px;
+}
+
+.data-viz-type-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: #555;
+  transition: all 0.15s;
+}
+
+.data-viz-type-btn:hover {
+  border-color: #999;
+  color: #333;
+}
+
+.data-viz-type-btn.active {
+  background: #333;
+  border-color: #333;
+  color: #fff;
+}
+
+.data-viz-type-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.data-style-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #f7f6f2;
+  border-radius: 4px;
+}
+
+.data-display-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #f7f6f2;
+  border-radius: 4px;
+}
+
+.data-display-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.data-display-label {
+  font-size: 12px;
+  color: #555;
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.data-geocode-prompt {
+  background: #f0f7ff;
+  border: 1px solid #c5ddf5;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 6px 0;
+}
+
+.data-geocode-prompt p {
+  font-size: 12px;
+  color: #333;
+  margin: 0 0 6px;
+}
+
+.data-region-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d1d1d1;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+
+.data-geocode-progress {
+  padding: 6px 0;
+}
+
+.data-geocode-progress p {
+  font-size: 12px;
+  color: #555;
+  margin: 0 0 4px;
+}
+
+.data-progress-bar {
+  height: 4px;
+  background: #e5e5e5;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.data-progress-fill {
+  height: 100%;
+  background: #457b9d;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.data-hint {
+  font-size: 11px;
+  color: #888;
+  margin: 2px 0 4px;
+  font-style: italic;
+}
+
+.data-toggle-btn {
+  padding: 3px 12px;
+  border: 1px solid #d1d1d1;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  color: #888;
+  transition: all 0.15s;
+}
+
+.data-toggle-btn:hover {
+  border-color: #999;
+}
+
+.data-toggle-btn.active {
+  background: #333;
+  border-color: #333;
+  color: #fff;
+}
+
+.data-unit-input {
+  width: 60px;
+  padding: 3px 6px;
+  border: 1px solid #d1d1d1;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  text-align: center;
+}
+
+.data-lock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.data-lock-label {
+  font-size: 12px;
+  color: #555;
+}
+
+.data-lock-btn {
+  padding: 4px 10px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: #555;
+  transition: all 0.15s;
+}
+
+.data-lock-btn:hover {
+  border-color: #999;
+}
+
+.data-lock-btn.locked {
+  background: #e8f0fe;
+  border-color: #a8c7f0;
+  color: #333;
+}
