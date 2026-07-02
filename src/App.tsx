@@ -8,6 +8,7 @@ import { MarkerStore } from './markers';
 import { ArrowStore } from './arrows';
 import type { ScaleUnit } from './scalebar';
 import type { LegendEntry } from './legend';
+import type { HeatmapLegendInfo } from './dataStore';
 import './App.css';
 
 export type AspectRatio = null | '3:2' | '1:1' | '3:4' | '9:16';
@@ -47,6 +48,7 @@ function App() {
   const [map, setMap] = useState<maplibregl.Map | null>(null);
   const [overlay, setOverlay] = useState<OverlaySettings>(DEFAULT_OVERLAY);
   const [legendEntries, setLegendEntries] = useState<LegendEntry[]>([]);
+  const [heatmapLegend, setHeatmapLegend] = useState<HeatmapLegendInfo | null>(null);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>(null);
   const annotationStoreRef = useRef(new AnnotationStore());
   const shapeStoreRef = useRef(new ShapeStore());
@@ -98,6 +100,7 @@ function App() {
         setLegendEntries={setLegendEntries}
         aspectRatio={aspectRatio}
         setAspectRatio={setAspectRatio}
+        onHeatmapLegend={setHeatmapLegend}
       />
       <div
         ref={areaRef}
@@ -114,7 +117,7 @@ function App() {
           '--bar-right': '0px',
         } as React.CSSProperties}
       >
-        <MapView onMapReady={setMap} overlay={overlay} legendEntries={legendEntries} />
+        <MapView onMapReady={setMap} overlay={overlay} legendEntries={legendEntries} heatmapLegend={heatmapLegend} />
         {bars && (
           <>
             {bars.top > 0 && <div className="letterbox-bar" style={{ top: 0, left: 0, right: 0, height: bars.top }} />}

@@ -1191,6 +1191,35 @@ html, body, #root {
   text-overflow: ellipsis;
 }
 
+.legend-heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.legend-heatmap-title {
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.legend-heatmap-bar {
+  height: 10px;
+  border-radius: 3px;
+  width: 100%;
+  min-width: 120px;
+}
+
+.legend-heatmap-range {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  color: #555;
+}
+
 .scale-bar-controls {
   margin-bottom: 8px;
 }
@@ -1617,6 +1646,46 @@ html, body, #root {
   font-size: 12px;
   font-family: 'Inter', Helvetica, Arial, sans-serif;
   text-align: center;
+}
+
+.data-ramp-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.data-ramp-btn {
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+}
+
+.data-ramp-btn.active {
+  border-color: #333;
+}
+
+.data-ramp-swatch {
+  display: block;
+  width: 28px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.data-ramp-inferno {
+  background: linear-gradient(to right, #160b39, #420a68, #932667, #dd513a, #fca50a, #fcffa4);
+}
+
+.data-ramp-magma {
+  background: linear-gradient(to right, #140e36, #3b0f70, #8c2981, #de4968, #fe9f6d, #fcfdbf);
+}
+
+.data-ramp-plasma {
+  background: linear-gradient(to right, #0d0887, #7d03a8, #cb4679, #f89441, #eff821);
+}
+
+.data-ramp-viridis {
+  background: linear-gradient(to right, #440154, #31688e, #1f9e89, #6ece58, #fde725);
 }
 
 .data-lock-row {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
-import type { DataState } from '../dataStore';
+import type { DataState, HeatmapLegendInfo } from '../dataStore';
 import {
   DEFAULT_DATA_STATE, ANCHOR_POSITIONS,
   parseCSV, autoDetectColumns, extractPoints, getSkippedRows,
@@ -11,6 +11,54 @@ import { ColorPickerPopover } from './ColorPickerPopover';
 const SOURCE_ID = 'data-points-source';
 const LAYER_ID = 'data-points-layer';
 const LABEL_LAYER_ID = 'data-labels-layer';
+const HEATMAP_LAYER_ID = 'data-heatmap-layer';
+
+const HEATMAP_RAMPS: Record<string, maplibregl.ExpressionSpecification> = {
+  inferno: [
+    'interpolate', ['linear'], ['heatmap-density'],
+    0,   'rgba(0,0,0,0)',
+    0.1, 'rgba(243,120,25,0.1)',
+    0.2, 'rgba(243,120,25,0.25)',
+    0.35, 'rgba(252,165,10,0.45)',
+    0.5, 'rgba(252,165,10,0.65)',
+    0.65, 'rgba(246,215,70,0.8)',
+    0.8, '#f6d746',
+    1,   '#fcffa4',
+  ],
+  magma: [
+    'interpolate', ['linear'], ['heatmap-density'],
+    0,   'rgba(0,0,0,0)',
+    0.1, 'rgba(183,55,121,0.1)',
+    0.2, 'rgba(222,73,104,0.25)',
+    0.35, 'rgba(247,112,92,0.45)',
+    0.5, 'rgba(254,159,109,0.65)',
+    0.65, 'rgba(254,207,146,0.8)',
+    0.8, '#fecf92',
+    1,   '#fcfdbf',
+  ],
+  plasma: [
+    'interpolate', ['linear'], ['heatmap-density'],
+    0,   'rgba(0,0,0,0)',
+    0.1, 'rgba(125,3,168,0.1)',
+    0.2, 'rgba(168,34,150,0.25)',
+    0.35, 'rgba(203,70,121,0.45)',
+    0.5, 'rgba(229,107,93,0.65)',
+    0.65, 'rgba(248,148,65,0.8)',
+    0.8, '#fdc328',
+    1,   '#f0f921',
+  ],
+  viridis: [
+    'interpolate', ['linear'], ['heatmap-density'],
+    0,   'rgba(0,0,0,0)',
+    0.1, 'rgba(33,145,140,0.1)',
+    0.2, 'rgba(31,158,137,0.25)',
+    0.35, 'rgba(53,183,121,0.45)',
+    0.5, 'rgba(110,206,88,0.65)',
+    0.65, 'rgba(181,222,43,0.8)',
+    0.8, '#b5de2b',
+    1,   '#fde725',
+  ],
+};
 
 const DATA_COLORS = [
   '#e63946', '#457b9d', '#2a9d8f', '#e9c46a', '#f4a261',
@@ -19,9 +67,10 @@ const DATA_COLORS = [
 
 interface DataToolsProps {
   map: maplibregl.Map | null;
+  onHeatmapLegend?: (info: HeatmapLegendInfo | null) => void;
 }
 
-export function DataTools({ map }: DataToolsProps) {
+export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
   const [data, setData] = useState<DataState>(DEFAULT_DATA_STATE);
   const [pasteText, setPasteText] = useState('');
   const sourceAdded = useRef(false);
@@ -31,6 +80,23 @@ export function DataTools({ map }: DataToolsProps) {
   const update = useCallback((patch: Partial<DataState>) => {
     setData(prev => ({ ...prev, ...patch }));
   }, []);
+
+  useEffect(() => {
+    if (!onHeatmapLegend) return;
+    if (data.vizType !== 'heatmap' || !data.valueCol || data.rows.length === 0) {
+      onHeatmapLegend(null);
+      return;
+    }
+    const points = extractPoints(data);
+    const { min, max } = getValueRange(points);
+    onHeatmapLegend({
+      visible: true,
+      title: data.heatmapLegendTitle || data.valueCol,
+      ramp: data.heatmapColorRamp,
+      min,
+      max,
+    });
+  }, [data.vizType, data.valueCol, data.rows, data.heatmapColorRamp, data.heatmapLegendTitle, onHeatmapLegend]);
 
   const handleGeocode = useCallback(async (locationCol: string, rows: DataRow[], columns: string[], bias: string) => {
     setGeocoding({ active: true, done: 0, total: 0 });
@@ -108,24 +174,65 @@ export function DataTools({ map }: DataToolsProps) {
       if (src) src.setData(geojson);
     }
 
-    if (!map.getLayer(LAYER_ID) && sourceAdded.current) {
-      map.addLayer({
-        id: LAYER_ID,
-        type: 'circle',
-        source: SOURCE_ID,
-        paint: {
-          'circle-radius': data.pointRadius,
-          'circle-color': data.pointColor,
-          'circle-opacity': data.opacity,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#fff',
-          'circle-stroke-opacity': data.opacity,
-        },
-      });
+    // Circle layer: add if needed, toggle visibility based on vizType
+    if (data.vizType !== 'heatmap') {
+      if (!map.getLayer(LAYER_ID) && sourceAdded.current) {
+        map.addLayer({
+          id: LAYER_ID,
+          type: 'circle',
+          source: SOURCE_ID,
+          paint: {
+            'circle-radius': data.pointRadius,
+            'circle-color': data.pointColor,
+            'circle-opacity': data.opacity,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#fff',
+            'circle-stroke-opacity': data.opacity,
+          },
+        });
+      }
+      if (map.getLayer(LAYER_ID)) {
+        map.setLayoutProperty(LAYER_ID, 'visibility', 'visible');
+      }
+    } else {
+      if (map.getLayer(LAYER_ID)) {
+        map.setLayoutProperty(LAYER_ID, 'visibility', 'none');
+      }
+    }
+
+    // Heatmap layer: add if needed, toggle visibility
+    if (data.vizType === 'heatmap') {
+      const points = extractPoints(data);
+      const { min, max } = getValueRange(points);
+      const weightExpr: maplibregl.ExpressionSpecification | undefined = data.valueCol
+        ? ['interpolate', ['linear'], ['coalesce', ['get', 'value'], min], min, 0, max, 1]
+        : undefined;
+
+      if (!map.getLayer(HEATMAP_LAYER_ID) && sourceAdded.current) {
+        map.addLayer({
+          id: HEATMAP_LAYER_ID,
+          type: 'heatmap',
+          source: SOURCE_ID,
+          paint: {
+            'heatmap-radius': data.heatmapRadius,
+            'heatmap-intensity': data.heatmapIntensity,
+            'heatmap-opacity': data.opacity,
+            'heatmap-color': HEATMAP_RAMPS[data.heatmapColorRamp],
+            ...(weightExpr ? { 'heatmap-weight': weightExpr } : {}),
+          },
+        });
+      }
+      if (map.getLayer(HEATMAP_LAYER_ID)) {
+        map.setLayoutProperty(HEATMAP_LAYER_ID, 'visibility', 'visible');
+      }
+    } else {
+      if (map.getLayer(HEATMAP_LAYER_ID)) {
+        map.setLayoutProperty(HEATMAP_LAYER_ID, 'visibility', 'none');
+      }
     }
 
     return () => {};
-  }, [map, data.rows, data.latCol, data.lngCol, data.valueCol, data.vizType, data.pointColor, data.pointRadius, data.maxRadius, data.opacity, data.labelAnchors, data.formatCommas, data.valuePrefix, data.valueSuffix]);
+  }, [map, data.rows, data.latCol, data.lngCol, data.valueCol, data.vizType, data.pointColor, data.pointRadius, data.maxRadius, data.opacity, data.labelAnchors, data.formatCommas, data.valuePrefix, data.valueSuffix, data.heatmapRadius, data.heatmapIntensity, data.heatmapColorRamp]);
 
   // Update paint properties when style changes
   useEffect(() => {
@@ -150,6 +257,26 @@ export function DataTools({ map }: DataToolsProps) {
     map.setPaintProperty(LAYER_ID, 'circle-opacity', data.opacity);
     map.setPaintProperty(LAYER_ID, 'circle-stroke-opacity', data.opacity);
   }, [map, data.vizType, data.pointColor, data.pointRadius, data.maxRadius, data.opacity, data.valueCol, data.rows]);
+
+  // Update heatmap paint properties
+  useEffect(() => {
+    if (!map || !map.getLayer(HEATMAP_LAYER_ID) || data.vizType !== 'heatmap') return;
+
+    map.setPaintProperty(HEATMAP_LAYER_ID, 'heatmap-radius', data.heatmapRadius);
+    map.setPaintProperty(HEATMAP_LAYER_ID, 'heatmap-intensity', data.heatmapIntensity);
+    map.setPaintProperty(HEATMAP_LAYER_ID, 'heatmap-opacity', data.opacity);
+    map.setPaintProperty(HEATMAP_LAYER_ID, 'heatmap-color', HEATMAP_RAMPS[data.heatmapColorRamp]);
+
+    if (data.valueCol) {
+      const points = extractPoints(data);
+      const { min, max } = getValueRange(points);
+      map.setPaintProperty(HEATMAP_LAYER_ID, 'heatmap-weight',
+        ['interpolate', ['linear'], ['coalesce', ['get', 'value'], min], min, 0, max, 1]
+      );
+    } else {
+      map.setPaintProperty(HEATMAP_LAYER_ID, 'heatmap-weight', 1);
+    }
+  }, [map, data.vizType, data.heatmapRadius, data.heatmapIntensity, data.opacity, data.heatmapColorRamp, data.valueCol, data.rows]);
 
   // Manage label layer
   useEffect(() => {
@@ -278,6 +405,7 @@ export function DataTools({ map }: DataToolsProps) {
     return () => {
       if (map) {
         if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
+        if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
         if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         sourceAdded.current = false;
@@ -446,41 +574,112 @@ export function DataTools({ map }: DataToolsProps) {
             >
               Bubbles
             </button>
+            <button
+              className={`data-viz-type-btn ${data.vizType === 'heatmap' ? 'active' : ''}`}
+              onClick={() => update({ vizType: 'heatmap' })}
+            >
+              Heatmap
+            </button>
           </div>
 
-          {/* Point style */}
+          {/* Style controls */}
           <div className="data-style-section">
-            <div className="style-row">
-              <span className="style-label">Color</span>
-              <ColorPickerPopover color={data.pointColor} onChange={c => update({ pointColor: c })} presetColors={DATA_COLORS} />
-            </div>
+            {data.vizType !== 'heatmap' ? (
+              <>
+                <div className="style-row">
+                  <span className="style-label">Color</span>
+                  <ColorPickerPopover color={data.pointColor} onChange={c => update({ pointColor: c })} presetColors={DATA_COLORS} />
+                </div>
 
-            <div className="style-row">
-              <span className="style-label">Size</span>
-              <input
-                type="range"
-                className="style-slider"
-                min={2}
-                max={20}
-                value={data.pointRadius}
-                onChange={e => update({ pointRadius: Number(e.target.value) })}
-              />
-              <span className="style-value">{data.pointRadius}px</span>
-            </div>
+                <div className="style-row">
+                  <span className="style-label">Size</span>
+                  <input
+                    type="range"
+                    className="style-slider"
+                    min={2}
+                    max={20}
+                    value={data.pointRadius}
+                    onChange={e => update({ pointRadius: Number(e.target.value) })}
+                  />
+                  <span className="style-value">{data.pointRadius}px</span>
+                </div>
 
-            {data.vizType === 'bubbles' && (
-              <div className="style-row">
-                <span className="style-label">Max</span>
-                <input
-                  type="range"
-                  className="style-slider"
-                  min={10}
-                  max={60}
-                  value={data.maxRadius}
-                  onChange={e => update({ maxRadius: Number(e.target.value) })}
-                />
-                <span className="style-value">{data.maxRadius}px</span>
-              </div>
+                {data.vizType === 'bubbles' && (
+                  <div className="style-row">
+                    <span className="style-label">Max</span>
+                    <input
+                      type="range"
+                      className="style-slider"
+                      min={10}
+                      max={60}
+                      value={data.maxRadius}
+                      onChange={e => update({ maxRadius: Number(e.target.value) })}
+                    />
+                    <span className="style-value">{data.maxRadius}px</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="style-row">
+                  <span className="style-label">Radius</span>
+                  <input
+                    type="range"
+                    className="style-slider"
+                    min={5}
+                    max={60}
+                    value={data.heatmapRadius}
+                    onChange={e => update({ heatmapRadius: Number(e.target.value) })}
+                  />
+                  <span className="style-value">{data.heatmapRadius}px</span>
+                </div>
+
+                <div className="style-row">
+                  <span className="style-label">Intensity</span>
+                  <input
+                    type="range"
+                    className="style-slider"
+                    min={1}
+                    max={50}
+                    value={Math.round(data.heatmapIntensity * 10)}
+                    onChange={e => update({ heatmapIntensity: Number(e.target.value) / 10 })}
+                  />
+                  <span className="style-value">{data.heatmapIntensity.toFixed(1)}</span>
+                </div>
+
+                <div className="style-row">
+                  <span className="style-label">Colors</span>
+                  <div className="data-ramp-picker">
+                    {(['inferno', 'magma', 'plasma', 'viridis'] as const).map(ramp => (
+                      <button
+                        key={ramp}
+                        className={`data-ramp-btn ${data.heatmapColorRamp === ramp ? 'active' : ''}`}
+                        onClick={() => update({ heatmapColorRamp: ramp })}
+                        title={ramp}
+                      >
+                        <span className={`data-ramp-swatch data-ramp-${ramp}`} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {data.valueCol && (
+                  <>
+                    <p className="data-hint">Weighted by {data.valueCol}</p>
+                    <div className="style-row">
+                      <span className="style-label">Legend</span>
+                      <input
+                        type="text"
+                        className="data-unit-input"
+                        style={{ flex: 1 }}
+                        placeholder={data.valueCol}
+                        value={data.heatmapLegendTitle}
+                        onChange={e => update({ heatmapLegendTitle: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
             <div className="style-row">
@@ -497,8 +696,8 @@ export function DataTools({ map }: DataToolsProps) {
             </div>
           </div>
 
-          {/* Display options */}
-          {data.labelCol && (
+          {/* Display options — hidden for heatmap */}
+          {data.labelCol && data.vizType !== 'heatmap' && (
             <div className="data-display-section">
               <div className="data-columns-header">Display</div>
               <div className="data-display-row">

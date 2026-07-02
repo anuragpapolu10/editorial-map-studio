@@ -10,11 +10,20 @@ import type { ScaleBarInfo } from '../scalebar';
 
 import type { OverlaySettings } from '../App';
 import type { LegendEntry } from '../legend';
+import type { HeatmapLegendInfo } from '../dataStore';
+
+const HEATMAP_GRADIENTS: Record<string, string> = {
+  inferno: 'linear-gradient(to right, rgba(243,120,25,0.3), #fca50a, #f6d746, #fcffa4)',
+  magma: 'linear-gradient(to right, rgba(183,55,121,0.3), #de4968, #fe9f6d, #fcfdbf)',
+  plasma: 'linear-gradient(to right, rgba(125,3,168,0.3), #cb4679, #f89441, #f0f921)',
+  viridis: 'linear-gradient(to right, rgba(33,145,140,0.3), #35b779, #b5de2b, #fde725)',
+};
 
 interface MapViewProps {
   onMapReady?: (map: maplibregl.Map) => void;
   overlay?: OverlaySettings | null;
   legendEntries?: LegendEntry[];
+  heatmapLegend?: HeatmapLegendInfo | null;
 }
 
 class GlobeControl implements maplibregl.IControl {
@@ -116,7 +125,7 @@ export const ARROW_SHAFT_LAYER_IDS = [
 export const ARROW_CP_HANDLE_LAYER_ID = 'arrows-cp-handles';
 export const SHAPE_HANDLE_LAYER_ID = 'shape-handles';
 
-export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProps) {
+export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [coords, setCoords] = useState({ lng: 0, lat: 0 });
@@ -837,7 +846,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
           </svg>
         </div>
       )}
-      {legendEntries.length > 0 && (
+      {(legendEntries.length > 0 || heatmapLegend?.visible) && (
         <div className="legend-preview">
           {legendEntries.map((entry) => (
             <div key={entry.id} className="legend-preview-row">
@@ -887,6 +896,19 @@ export function MapView({ onMapReady, overlay, legendEntries = [] }: MapViewProp
               <span className="legend-preview-label">{entry.label || '—'}</span>
             </div>
           ))}
+          {heatmapLegend?.visible && (
+            <div className="legend-heatmap">
+              <span className="legend-heatmap-title">{heatmapLegend.title}</span>
+              <div
+                className="legend-heatmap-bar"
+                style={{ background: HEATMAP_GRADIENTS[heatmapLegend.ramp] }}
+              />
+              <div className="legend-heatmap-range">
+                <span>{heatmapLegend.min}</span>
+                <span>{heatmapLegend.max}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="coords-display">

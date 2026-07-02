@@ -15,6 +15,7 @@ import { MarkerStore } from '../markers';
 import { ArrowStore } from '../arrows';
 import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
+import type { HeatmapLegendInfo } from '../dataStore';
 
 export type ActiveTool = null | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line';
 
@@ -32,9 +33,10 @@ interface SidebarProps {
   setLegendEntries: React.Dispatch<React.SetStateAction<LegendEntry[]>>;
   aspectRatio: AspectRatio;
   setAspectRatio: React.Dispatch<React.SetStateAction<AspectRatio>>;
+  onHeatmapLegend?: (info: HeatmapLegendInfo | null) => void;
 }
 
-export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowStore, overlay, setOverlay, legendEntries, setLegendEntries, aspectRatio, setAspectRatio }: SidebarProps) {
+export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowStore, overlay, setOverlay, legendEntries, setLegendEntries, aspectRatio, setAspectRatio, onHeatmapLegend }: SidebarProps) {
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
   const [tab, setTab] = useState<SidebarTab>('drawing');
 
@@ -106,7 +108,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
       </div>
 
       <div className="sidebar-section" style={tab !== 'data' ? { display: 'none' } : undefined}>
-        <DataTools map={map} />
+        <DataTools map={map} onHeatmapLegend={onHeatmapLegend} />
       </div>
 
       <div className="sidebar-section">
