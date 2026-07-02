@@ -284,7 +284,7 @@ export async function geocodeLocations(
     if (done < total) await delay(1100);
   }
 
-  return rows.map((row, i) => {
+  return rows.map((_row, i) => {
     const name = names[i];
     const coords = name ? unique.get(name) ?? null : null;
     return {

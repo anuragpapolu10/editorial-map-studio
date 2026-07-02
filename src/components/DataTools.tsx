@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
-import type { DataState, HeatmapLegendInfo } from '../dataStore';
+import type { DataState, DataRow, HeatmapLegendInfo } from '../dataStore';
 import {
   DEFAULT_DATA_STATE, ANCHOR_POSITIONS,
   parseCSV, autoDetectColumns, extractPoints, getSkippedRows,
@@ -242,7 +242,6 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     const { min, max } = getValueRange(points);
 
     if (data.vizType === 'bubbles' && data.valueCol) {
-      const range = max - min || 1;
       map.setPaintProperty(LAYER_ID, 'circle-radius', [
         'interpolate', ['linear'],
         ['coalesce', ['get', 'value'], min],
