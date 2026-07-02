@@ -146,11 +146,13 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - [x] **Aspect ratio export cropping** — JPG and PNG exports crop the captured canvas to the selected aspect ratio (3:2, 1:1, 3:4, 9:16) before compositing overlays. PNG overlay layers (title, scale bar, legend, inset) are also rendered at the cropped dimensions.
 - [x] **Inset minimap** — a second MapLibre GL instance positioned bottom-right above the scale bar. Shows the same editorial basemap zoomed out 5 levels, synced to main map center. Blue rectangle shows the main map's viewport bounds. Toggle in Export panel ("Inset map"), on by default. Requires `preserveDrawingBuffer: true` for export capture. Composited onto JPG exports; saved as separate `map-inset.png` in PNG export. Custom implementation (no plugin) using the same maplibre-gl instance to avoid version conflicts.
 
-### Data Tab (Phase 1 — Points & Bubbles)
+### Data Tab (Phase 1 — Points, Bubbles & Heatmaps)
 - [x] **CSV paste import** — textarea, "Load data" button, "Clear data" with confirmation, "Try sample" pre-fills example CSV
 - [x] **Column auto-detection** — auto-picks lat/lng/value/label columns from common names (lat, latitude, lng, longitude, value, count, population, name, city, county, etc.)
 - [x] **Point visualization** — MapLibre circle layer with configurable color (custom color picker), size, opacity
 - [x] **Bubble visualization** — proportional circles sized by value column, with min/max radius sliders
+- [x] **Heatmap visualization** — MapLibre heatmap layer with configurable radius (5–100px), intensity (0.1–5.0, default 2.0), and opacity. Four color ramps: inferno, magma, plasma, viridis. Semi-transparent rgba colors at low density stops fade smoothly from transparent → warm/hot colors, avoiding stroke-like outlines. When a value column is selected, `heatmap-weight` is normalized from raw values to 0–1 range using `['interpolate', ['linear'], ..., min, 0, max, 1]` so different values produce visibly different-sized hotspots.
+- [x] **Heatmap legend** — auto-generated gradient legend that appears in the regular legend overlay on the map. Shows editable title (defaults to value column name), a CSS gradient bar matching the selected color ramp, and min/max value range. Legend visibility is tied to heatmap mode — appears when heatmap is active with a value column, disappears when switching to points/bubbles. State flows via callback chain: DataTools → Sidebar → App → MapView.
 - [x] **Labels & values** — toggle-able text labels and formatted values on each point. Uses MapLibre symbol layer with `text-radial-offset` for positioning. Click a label on the map to cycle its anchor position (top/right/bottom/left).
 - [x] **Dynamic bubble label offset** — in bubble mode, `text-radial-offset` scales proportionally with bubble radius (`radius_px / label_size + 0.4`) so labels clear big bubbles without floating too far from small ones
 - [x] **Value formatting** — commas toggle (1000 → 1,000), prefix input (e.g. "$", "£"), suffix input (e.g. " km²", "%"). Applied via pre-computed `formattedValue` in GeoJSON properties since MapLibre expressions can't do `toLocaleString`.
@@ -160,9 +162,10 @@ The arrow tool uses a **click-on-shaft-to-add-bend-points** UX (inspired by socc
 - [x] **Tab preservation** — Drawing and Data tabs use `display: none` (not conditional rendering) so component state persists when switching tabs
 
 Key files:
-- `src/dataStore.ts` — DataState interface, CSV parsing, column auto-detection, `pointsToGeoJSON()`, `extractPoints()`, geocoding (`geocodeLocations()`, Nominatim API)
-- `src/components/DataTools.tsx` — Data tab UI, MapLibre layer management (circle + symbol layers), label click-to-reposition, geocode flow
-- `src/components/Sidebar.tsx` — Tab switching (Drawing/Data), ActiveTool management
+- `src/dataStore.ts` — DataState interface, CSV parsing, column auto-detection, `pointsToGeoJSON()`, `extractPoints()`, geocoding (`geocodeLocations()`, Nominatim API). Also exports `HeatmapLegendInfo` interface for legend data flow.
+- `src/components/DataTools.tsx` — Data tab UI, MapLibre layer management (circle + heatmap + symbol layers), label click-to-reposition, geocode flow. Contains `HEATMAP_RAMPS` color definitions and `HEATMAP_LAYER_ID`. Reports legend info via `onHeatmapLegend` callback.
+- `src/components/Sidebar.tsx` — Tab switching (Drawing/Data), ActiveTool management, passes `onHeatmapLegend` through to DataTools
+- `src/components/MapView.tsx` — renders heatmap gradient legend in the legend overlay card using `HEATMAP_GRADIENTS` CSS gradients
 
 ### Overlay State Architecture
 - `OverlaySettings` interface in `App.tsx` holds title, subtitle, sizes, alignment, scale bar toggle, scale unit, compass toggle, minimap toggle — all lifted to App level

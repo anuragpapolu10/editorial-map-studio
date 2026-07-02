@@ -51,7 +51,7 @@ These aren't decorations — they're what separates a useful map from a confusin
 - **Cross-tool selection** — click any element while a different tool is active to auto-switch and select it.
 - **Search with pin** — search for places, landmarks, or businesses and a temporary pin marks the result on the map. Dismiss it with the × button or search again.
 - **Add boundary from search** — when searching for a city, country, state, or park, click "Add boundary" on the pin to trace its outline onto the map as an editable polygon. Customize stroke, fill, opacity, and dash style just like any other shape.
-- **Data tab** — paste CSV data to create point and bubble maps. Auto-detects lat/lng/value/label columns from common names. Auto-geocoding via Nominatim for CSVs without coordinates (with optional region bias like "UK" or "Brazil"). Proportional bubbles sized by value, toggleable labels and values, number formatting with commas and prefix/suffix units ($, km², %, etc.). Click labels on the map to reposition them.
+- **Data tab** — paste CSV data to create point, bubble, and heatmap maps. Auto-detects lat/lng/value/label columns from common names. Auto-geocoding via Nominatim for CSVs without coordinates (with optional region bias like "UK" or "Brazil"). Proportional bubbles sized by value, toggleable labels and values, number formatting with commas and prefix/suffix units ($, km², %, etc.). Click labels on the map to reposition them. Heatmap mode with configurable radius, intensity, opacity, and four color ramps (inferno, magma, plasma, viridis). Value-weighted heatmaps with auto-generated gradient legend showing min/max range and editable title.
 
 ## Planned features
 
