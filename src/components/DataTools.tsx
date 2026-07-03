@@ -11,7 +11,15 @@ import { ColorPickerPopover } from './ColorPickerPopover';
 const SOURCE_ID = 'data-points-source';
 const LAYER_ID = 'data-points-layer';
 const LABEL_LAYER_ID = 'data-labels-layer';
+const VALUE_LAYER_ID = 'data-values-layer';
 const HEATMAP_LAYER_ID = 'data-heatmap-layer';
+const SPIKE_SOURCE_ID = 'data-spikes-source';
+const SPIKE_LAYER_ID = 'data-spikes-layer';
+const SPIKE_OUTLINE_LAYER_ID = 'data-spikes-outline-layer';
+const SPIKE_LABELS_SOURCE_ID = 'data-spike-labels-source';
+const SPIKE_LABELS_LAYER_ID = 'data-spike-labels-layer';
+const SPIKE_BASE_LABELS_SOURCE_ID = 'data-spike-base-labels-source';
+const SPIKE_BASE_LABELS_LAYER_ID = 'data-spike-base-labels-layer';
 
 const HEATMAP_RAMPS: Record<string, maplibregl.ExpressionSpecification> = {
   inferno: [
@@ -175,7 +183,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     }
 
     // Circle layer: add if needed, toggle visibility based on vizType
-    if (data.vizType !== 'heatmap') {
+    if (data.vizType !== 'heatmap' && data.vizType !== 'spikes') {
       if (!map.getLayer(LAYER_ID) && sourceAdded.current) {
         map.addLayer({
           id: LAYER_ID,
@@ -277,59 +285,264 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     }
   }, [map, data.vizType, data.heatmapRadius, data.heatmapIntensity, data.opacity, data.heatmapColorRamp, data.valueCol, data.rows]);
 
-  // Manage label layer
+  // Manage spike layer
+  const spikeDataRef = useRef(data);
+  spikeDataRef.current = data;
+
+  useEffect(() => {
+    if (!map) return;
+    if (data.vizType !== 'spikes' || !data.valueCol || data.rows.length === 0) {
+      if (map.getLayer(SPIKE_LAYER_ID)) map.setLayoutProperty(SPIKE_LAYER_ID, 'visibility', 'none');
+      if (map.getLayer(SPIKE_OUTLINE_LAYER_ID)) map.setLayoutProperty(SPIKE_OUTLINE_LAYER_ID, 'visibility', 'none');
+      if (map.getLayer(SPIKE_LABELS_LAYER_ID)) map.setLayoutProperty(SPIKE_LABELS_LAYER_ID, 'visibility', 'none');
+      if (map.getLayer(SPIKE_BASE_LABELS_LAYER_ID)) map.setLayoutProperty(SPIKE_BASE_LABELS_LAYER_ID, 'visibility', 'none');
+      return;
+    }
+
+    const buildSpikeGeoJSON = (): { polys: GeoJSON.FeatureCollection; labels: GeoJSON.FeatureCollection; baseLabels: GeoJSON.FeatureCollection } => {
+      const d = spikeDataRef.current;
+      const pts = extractPoints(d);
+      const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+      if (pts.length === 0 || !d.valueCol) return { polys: empty, labels: empty, baseLabels: empty };
+      const { min, max } = getValueRange(pts);
+      const range = max - min || 1;
+      const halfW = d.spikeWidth / 2;
+
+      const polyFeatures: GeoJSON.Feature[] = [];
+      const labelFeatures: GeoJSON.Feature[] = [];
+      const baseLabelFeatures: GeoJSON.Feature[] = [];
+      for (const p of pts) {
+        const val = p.value ?? min;
+        const t = (val - min) / range;
+        const h = d.spikeHeight * t;
+        if (h < 1) continue;
+
+        const base = map.project([p.lng, p.lat]);
+        let coords: [number, number][];
+        let tipLng: number;
+        let tipLat: number;
+
+        if (d.spikeStyle === 'pointed') {
+          const tip = map.unproject({ x: base.x, y: base.y - h });
+          const left = map.unproject({ x: base.x - halfW, y: base.y });
+          const right = map.unproject({ x: base.x + halfW, y: base.y });
+          tipLng = tip.lng; tipLat = tip.lat;
+          coords = [
+            [left.lng, left.lat],
+            [tip.lng, tip.lat],
+            [right.lng, right.lat],
+            [left.lng, left.lat],
+          ];
+        } else {
+          const tl = map.unproject({ x: base.x - halfW, y: base.y - h });
+          const tr = map.unproject({ x: base.x + halfW, y: base.y - h });
+          const br = map.unproject({ x: base.x + halfW, y: base.y });
+          const bl = map.unproject({ x: base.x - halfW, y: base.y });
+          const topCenter = map.unproject({ x: base.x, y: base.y - h });
+          tipLng = topCenter.lng; tipLat = topCenter.lat;
+          coords = [
+            [bl.lng, bl.lat],
+            [tl.lng, tl.lat],
+            [tr.lng, tr.lat],
+            [br.lng, br.lat],
+            [bl.lng, bl.lat],
+          ];
+        }
+
+        polyFeatures.push({
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: [coords] },
+          properties: { value: p.value, label: p.label },
+        });
+
+        let fv = '';
+        if (p.value !== null) {
+          fv = (d.spikeCommas ? p.value.toLocaleString('en-US') : String(p.value)) + d.spikeSuffix;
+        }
+        labelFeatures.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [tipLng, tipLat] },
+          properties: { formattedValue: fv },
+        });
+
+        baseLabelFeatures.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+          properties: { label: p.label },
+        });
+      }
+      return {
+        polys: { type: 'FeatureCollection', features: polyFeatures },
+        labels: { type: 'FeatureCollection', features: labelFeatures },
+        baseLabels: { type: 'FeatureCollection', features: baseLabelFeatures },
+      };
+    };
+
+    const { polys, labels, baseLabels } = buildSpikeGeoJSON();
+
+    if (!map.getSource(SPIKE_SOURCE_ID)) {
+      map.addSource(SPIKE_SOURCE_ID, { type: 'geojson', data: polys });
+    } else {
+      (map.getSource(SPIKE_SOURCE_ID) as maplibregl.GeoJSONSource).setData(polys);
+    }
+
+    if (!map.getSource(SPIKE_LABELS_SOURCE_ID)) {
+      map.addSource(SPIKE_LABELS_SOURCE_ID, { type: 'geojson', data: labels });
+    } else {
+      (map.getSource(SPIKE_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(labels);
+    }
+
+    if (!map.getSource(SPIKE_BASE_LABELS_SOURCE_ID)) {
+      map.addSource(SPIKE_BASE_LABELS_SOURCE_ID, { type: 'geojson', data: baseLabels });
+    } else {
+      (map.getSource(SPIKE_BASE_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource).setData(baseLabels);
+    }
+
+    if (!map.getLayer(SPIKE_LAYER_ID)) {
+      map.addLayer({
+        id: SPIKE_LAYER_ID,
+        type: 'fill',
+        source: SPIKE_SOURCE_ID,
+        paint: {
+          'fill-color': data.spikeColor,
+          'fill-opacity': data.opacity * 0.35,
+        },
+      });
+    }
+    if (!map.getLayer(SPIKE_OUTLINE_LAYER_ID)) {
+      map.addLayer({
+        id: SPIKE_OUTLINE_LAYER_ID,
+        type: 'line',
+        source: SPIKE_SOURCE_ID,
+        paint: {
+          'line-color': data.spikeColor,
+          'line-width': 1,
+          'line-opacity': data.opacity,
+        },
+      });
+    }
+
+    if (data.spikeShowValues) {
+      if (!map.getLayer(SPIKE_LABELS_LAYER_ID)) {
+        map.addLayer({
+          id: SPIKE_LABELS_LAYER_ID,
+          type: 'symbol',
+          source: SPIKE_LABELS_SOURCE_ID,
+          layout: {
+            'text-field': ['get', 'formattedValue'],
+            'text-size': data.spikeLabelSize,
+            'text-anchor': 'bottom',
+            'text-offset': [0, -0.3],
+            'text-allow-overlap': true,
+            'icon-allow-overlap': true,
+          },
+          paint: {
+            'text-color': '#333',
+            'text-halo-color': '#fff',
+            'text-halo-width': 1.5,
+          },
+        });
+      }
+      map.setLayoutProperty(SPIKE_LABELS_LAYER_ID, 'text-size', data.spikeLabelSize);
+      map.setLayoutProperty(SPIKE_LABELS_LAYER_ID, 'visibility', 'visible');
+    } else {
+      if (map.getLayer(SPIKE_LABELS_LAYER_ID)) {
+        map.setLayoutProperty(SPIKE_LABELS_LAYER_ID, 'visibility', 'none');
+      }
+    }
+
+    if (data.spikeShowLabels && data.labelCol) {
+      if (!map.getLayer(SPIKE_BASE_LABELS_LAYER_ID)) {
+        map.addLayer({
+          id: SPIKE_BASE_LABELS_LAYER_ID,
+          type: 'symbol',
+          source: SPIKE_BASE_LABELS_SOURCE_ID,
+          layout: {
+            'text-field': ['get', 'label'],
+            'text-size': data.spikeLabelSize,
+            'text-anchor': 'top',
+            'text-offset': [0, 0.4],
+            'text-allow-overlap': true,
+            'icon-allow-overlap': true,
+          },
+          paint: {
+            'text-color': '#333',
+            'text-halo-color': '#fff',
+            'text-halo-width': 1.5,
+          },
+        });
+      }
+      map.setLayoutProperty(SPIKE_BASE_LABELS_LAYER_ID, 'text-size', data.spikeLabelSize);
+      map.setLayoutProperty(SPIKE_BASE_LABELS_LAYER_ID, 'visibility', 'visible');
+    } else {
+      if (map.getLayer(SPIKE_BASE_LABELS_LAYER_ID)) {
+        map.setLayoutProperty(SPIKE_BASE_LABELS_LAYER_ID, 'visibility', 'none');
+      }
+    }
+
+    map.setPaintProperty(SPIKE_LAYER_ID, 'fill-color', data.spikeColor);
+    map.setPaintProperty(SPIKE_LAYER_ID, 'fill-opacity', data.opacity * 0.35);
+    map.setPaintProperty(SPIKE_OUTLINE_LAYER_ID, 'line-color', data.spikeColor);
+    map.setPaintProperty(SPIKE_OUTLINE_LAYER_ID, 'line-opacity', data.opacity);
+    map.setLayoutProperty(SPIKE_LAYER_ID, 'visibility', 'visible');
+    map.setLayoutProperty(SPIKE_OUTLINE_LAYER_ID, 'visibility', 'visible');
+
+    const onMoveEnd = () => {
+      const result = buildSpikeGeoJSON();
+      const src = map.getSource(SPIKE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (src) src.setData(result.polys);
+      const labelSrc = map.getSource(SPIKE_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (labelSrc) labelSrc.setData(result.labels);
+      const baseSrc = map.getSource(SPIKE_BASE_LABELS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      if (baseSrc) baseSrc.setData(result.baseLabels);
+    };
+    map.on('moveend', onMoveEnd);
+    return () => {
+      map.off('moveend', onMoveEnd);
+    };
+  }, [map, data.vizType, data.valueCol, data.rows, data.spikeStyle, data.spikeHeight, data.spikeWidth, data.spikeColor, data.opacity, data.spikeShowValues, data.spikeCommas, data.spikeSuffix, data.spikeShowLabels, data.labelCol, data.spikeLabelSize]);
+
+  // Manage label layer (below point) and value layer (above point)
   useEffect(() => {
     if (!map || !sourceAdded.current) return;
 
-    const wantLabels = data.showLabels && data.labelCol;
-    const wantValues = data.showValues && data.valueCol;
+    const isPointOrBubble = data.vizType === 'points' || data.vizType === 'bubbles';
+    const wantLabels = isPointOrBubble && data.showLabels && data.labelCol;
+    const wantValues = isPointOrBubble && data.showValues && data.valueCol;
 
-    if (wantLabels || wantValues) {
-      let textField: maplibregl.ExpressionSpecification;
-      if (wantLabels && wantValues) {
-        textField = ['concat', ['get', 'label'], '\n', ['get', 'formattedValue']];
-      } else if (wantLabels) {
-        textField = ['get', 'label'];
-      } else {
-        textField = ['get', 'formattedValue'];
-      }
+    const points = extractPoints(data);
+    const { min, max } = getValueRange(points);
 
-      const anchorExpr: maplibregl.ExpressionSpecification = [
-        'match', ['get', '_anchor'],
-        'top', 'bottom',
-        'bottom', 'top',
-        'left', 'right',
-        'right', 'left',
-        'bottom',
+    let labelOffset: maplibregl.ExpressionSpecification | number;
+    let valueOffset: maplibregl.ExpressionSpecification | number;
+
+    if (data.vizType === 'bubbles' && data.valueCol) {
+      const radiusExpr: maplibregl.ExpressionSpecification = [
+        'interpolate', ['linear'],
+        ['coalesce', ['get', 'value'], min],
+        min, data.pointRadius,
+        max, data.maxRadius,
       ];
+      const baseOffset = ['+', ['/', radiusExpr, data.labelSize], 0.4] as maplibregl.ExpressionSpecification;
+      labelOffset = baseOffset;
+      valueOffset = baseOffset;
+    } else {
+      labelOffset = 0.8;
+      valueOffset = 0.8;
+    }
 
-      const points = extractPoints(data);
-      const { min, max } = getValueRange(points);
-      let radialOffset: maplibregl.ExpressionSpecification;
-
-      if (data.vizType === 'bubbles' && data.valueCol) {
-        // Scale radial offset with bubble radius: radius_px / text_size + gap
-        const radiusExpr: maplibregl.ExpressionSpecification = [
-          'interpolate', ['linear'],
-          ['coalesce', ['get', 'value'], min],
-          min, data.pointRadius,
-          max, data.maxRadius,
-        ];
-        radialOffset = ['+', ['/', radiusExpr, data.labelSize], 0.4] as maplibregl.ExpressionSpecification;
-      } else {
-        radialOffset = 0.8 as any;
-      }
-
+    // Label layer — below the point
+    if (wantLabels) {
       if (!map.getLayer(LABEL_LAYER_ID)) {
         map.addLayer({
           id: LABEL_LAYER_ID,
           type: 'symbol',
           source: SOURCE_ID,
           layout: {
-            'text-field': textField,
+            'text-field': ['get', 'label'],
             'text-size': data.labelSize,
-            'text-anchor': anchorExpr,
-            'text-radial-offset': radialOffset,
+            'text-anchor': 'top',
+            'text-radial-offset': labelOffset,
             'text-allow-overlap': true,
             'icon-allow-overlap': true,
           },
@@ -340,48 +553,50 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           },
         });
       } else {
-        map.setLayoutProperty(LABEL_LAYER_ID, 'text-field', textField);
+        map.setLayoutProperty(LABEL_LAYER_ID, 'text-field', ['get', 'label']);
         map.setLayoutProperty(LABEL_LAYER_ID, 'text-size', data.labelSize);
-        map.setLayoutProperty(LABEL_LAYER_ID, 'text-anchor', anchorExpr);
-        map.setLayoutProperty(LABEL_LAYER_ID, 'text-radial-offset', radialOffset);
+        map.setLayoutProperty(LABEL_LAYER_ID, 'text-anchor', 'top');
+        map.setLayoutProperty(LABEL_LAYER_ID, 'text-radial-offset', labelOffset);
       }
     } else {
       if (map.getLayer(LABEL_LAYER_ID)) {
         map.removeLayer(LABEL_LAYER_ID);
       }
     }
-  }, [map, data.showLabels, data.showValues, data.labelCol, data.valueCol, data.labelSize, data.rows, data.labelAnchors, data.formatCommas, data.valuePrefix, data.valueSuffix, data.vizType, data.pointRadius, data.maxRadius]);
 
-  // Click label to cycle position
-  useEffect(() => {
-    if (!map) return;
-
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(LABEL_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [LABEL_LAYER_ID] });
-      if (features.length === 0) return;
-      const idx = features[0].properties?._idx;
-      if (idx == null) return;
-      setData(prev => {
-        const current = prev.labelAnchors[idx] ?? 0;
-        const next = (current + 1) % ANCHOR_POSITIONS.length;
-        return { ...prev, labelAnchors: { ...prev.labelAnchors, [idx]: next } };
-      });
-    };
-
-    const onEnter = () => { map.getCanvas().style.cursor = 'pointer'; };
-    const onLeave = () => { map.getCanvas().style.cursor = ''; };
-
-    map.on('click', LABEL_LAYER_ID, onClick);
-    map.on('mouseenter', LABEL_LAYER_ID, onEnter);
-    map.on('mouseleave', LABEL_LAYER_ID, onLeave);
-
-    return () => {
-      map.off('click', LABEL_LAYER_ID, onClick);
-      map.off('mouseenter', LABEL_LAYER_ID, onEnter);
-      map.off('mouseleave', LABEL_LAYER_ID, onLeave);
-    };
-  }, [map]);
+    // Value layer — above the point
+    if (wantValues) {
+      if (!map.getLayer(VALUE_LAYER_ID)) {
+        map.addLayer({
+          id: VALUE_LAYER_ID,
+          type: 'symbol',
+          source: SOURCE_ID,
+          layout: {
+            'text-field': ['get', 'formattedValue'],
+            'text-size': data.labelSize,
+            'text-anchor': 'bottom',
+            'text-radial-offset': valueOffset,
+            'text-allow-overlap': true,
+            'icon-allow-overlap': true,
+          },
+          paint: {
+            'text-color': '#333',
+            'text-halo-color': '#fff',
+            'text-halo-width': 1.5,
+          },
+        });
+      } else {
+        map.setLayoutProperty(VALUE_LAYER_ID, 'text-field', ['get', 'formattedValue']);
+        map.setLayoutProperty(VALUE_LAYER_ID, 'text-size', data.labelSize);
+        map.setLayoutProperty(VALUE_LAYER_ID, 'text-anchor', 'bottom');
+        map.setLayoutProperty(VALUE_LAYER_ID, 'text-radial-offset', valueOffset);
+      }
+    } else {
+      if (map.getLayer(VALUE_LAYER_ID)) {
+        map.removeLayer(VALUE_LAYER_ID);
+      }
+    }
+  }, [map, data.showLabels, data.showValues, data.labelCol, data.valueCol, data.labelSize, data.rows, data.formatCommas, data.valuePrefix, data.valueSuffix, data.vizType, data.pointRadius, data.maxRadius]);
 
   // Zoom to data after loading
   const zoomedRef = useRef<string>('');
@@ -403,9 +618,17 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
   useEffect(() => {
     return () => {
       if (map) {
+        if (map.getLayer(VALUE_LAYER_ID)) map.removeLayer(VALUE_LAYER_ID);
         if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
         if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
+        if (map.getLayer(SPIKE_BASE_LABELS_LAYER_ID)) map.removeLayer(SPIKE_BASE_LABELS_LAYER_ID);
+        if (map.getLayer(SPIKE_LABELS_LAYER_ID)) map.removeLayer(SPIKE_LABELS_LAYER_ID);
+        if (map.getLayer(SPIKE_OUTLINE_LAYER_ID)) map.removeLayer(SPIKE_OUTLINE_LAYER_ID);
+        if (map.getLayer(SPIKE_LAYER_ID)) map.removeLayer(SPIKE_LAYER_ID);
         if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+        if (map.getSource(SPIKE_BASE_LABELS_SOURCE_ID)) map.removeSource(SPIKE_BASE_LABELS_SOURCE_ID);
+        if (map.getSource(SPIKE_LABELS_SOURCE_ID)) map.removeSource(SPIKE_LABELS_SOURCE_ID);
+        if (map.getSource(SPIKE_SOURCE_ID)) map.removeSource(SPIKE_SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         sourceAdded.current = false;
       }
@@ -574,6 +797,14 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               Bubbles
             </button>
             <button
+              className={`data-viz-type-btn ${data.vizType === 'spikes' ? 'active' : ''}`}
+              onClick={() => update({ vizType: 'spikes' })}
+              disabled={!data.valueCol}
+              title={!data.valueCol ? 'Pick a value column first' : ''}
+            >
+              Spikes
+            </button>
+            <button
               className={`data-viz-type-btn ${data.vizType === 'heatmap' ? 'active' : ''}`}
               onClick={() => update({ vizType: 'heatmap' })}
             >
@@ -583,7 +814,116 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
 
           {/* Style controls */}
           <div className="data-style-section">
-            {data.vizType !== 'heatmap' ? (
+            {data.vizType === 'spikes' ? (
+              <>
+                <div className="style-row">
+                  <span className="style-label">Style</span>
+                  <div className="data-viz-types" style={{ gap: 0 }}>
+                    <button
+                      className={`data-viz-type-btn ${data.spikeStyle === 'pointed' ? 'active' : ''}`}
+                      onClick={() => update({ spikeStyle: 'pointed' })}
+                    >
+                      Spike
+                    </button>
+                    <button
+                      className={`data-viz-type-btn ${data.spikeStyle === 'bar' ? 'active' : ''}`}
+                      onClick={() => update({ spikeStyle: 'bar' })}
+                    >
+                      Bar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="style-row">
+                  <span className="style-label">Color</span>
+                  <ColorPickerPopover color={data.spikeColor} onChange={c => update({ spikeColor: c })} presetColors={DATA_COLORS} />
+                </div>
+
+                <div className="style-row">
+                  <span className="style-label">Height</span>
+                  <input
+                    type="range"
+                    className="style-slider"
+                    min={30}
+                    max={300}
+                    value={data.spikeHeight}
+                    onChange={e => update({ spikeHeight: Number(e.target.value) })}
+                  />
+                  <span className="style-value">{data.spikeHeight}px</span>
+                </div>
+
+                <div className="style-row">
+                  <span className="style-label">Width</span>
+                  <input
+                    type="range"
+                    className="style-slider"
+                    min={2}
+                    max={20}
+                    value={data.spikeWidth}
+                    onChange={e => update({ spikeWidth: Number(e.target.value) })}
+                  />
+                  <span className="style-value">{data.spikeWidth}px</span>
+                </div>
+
+                <div className="style-row">
+                  <span className="style-label">Values</span>
+                  <button
+                    className={`data-toggle-btn ${data.spikeShowValues ? 'active' : ''}`}
+                    onClick={() => update({ spikeShowValues: !data.spikeShowValues })}
+                  >
+                    {data.spikeShowValues ? 'On' : 'Off'}
+                  </button>
+                </div>
+                {data.labelCol && (
+                  <div className="style-row">
+                    <span className="style-label">Labels</span>
+                    <button
+                      className={`data-toggle-btn ${data.spikeShowLabels ? 'active' : ''}`}
+                      onClick={() => update({ spikeShowLabels: !data.spikeShowLabels })}
+                    >
+                      {data.spikeShowLabels ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                )}
+                {(data.spikeShowValues || data.spikeShowLabels) && (
+                  <div className="style-row">
+                    <span className="style-label">Text size</span>
+                    <input
+                      type="range"
+                      className="style-slider"
+                      min={8}
+                      max={20}
+                      value={data.spikeLabelSize}
+                      onChange={e => update({ spikeLabelSize: Number(e.target.value) })}
+                    />
+                    <span className="style-value">{data.spikeLabelSize}px</span>
+                  </div>
+                )}
+                {data.spikeShowValues && (
+                  <>
+                    <div className="style-row">
+                      <span className="style-label">Commas</span>
+                      <button
+                        className={`data-toggle-btn ${data.spikeCommas ? 'active' : ''}`}
+                        onClick={() => update({ spikeCommas: !data.spikeCommas })}
+                      >
+                        {data.spikeCommas ? 'On' : 'Off'}
+                      </button>
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Append</span>
+                      <input
+                        className="data-unit-input"
+                        type="text"
+                        placeholder="km², %..."
+                        value={data.spikeSuffix}
+                        onChange={e => update({ spikeSuffix: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : data.vizType !== 'heatmap' ? (
               <>
                 <div className="style-row">
                   <span className="style-label">Color</span>
@@ -695,8 +1035,8 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
             </div>
           </div>
 
-          {/* Display options — hidden for heatmap */}
-          {data.labelCol && data.vizType !== 'heatmap' && (
+          {/* Display options — hidden for heatmap and spikes */}
+          {data.labelCol && data.vizType !== 'heatmap' && data.vizType !== 'spikes' && (
             <div className="data-display-section">
               <div className="data-columns-header">Display</div>
               <div className="data-display-row">
@@ -710,7 +1050,6 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               </div>
               {data.showLabels && (
                 <>
-                <p className="data-hint">Click a label on the map to reposition it</p>
                 <div className="data-display-row">
                   <span className="data-display-label">Label size</span>
                   <input

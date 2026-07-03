@@ -10,7 +10,7 @@ export interface DataState {
   lngCol: string | null;
   valueCol: string | null;
   labelCol: string | null;
-  vizType: 'points' | 'bubbles' | 'heatmap';
+  vizType: 'points' | 'bubbles' | 'heatmap' | 'spikes';
   pointColor: string;
   pointRadius: number;
   maxRadius: number;
@@ -27,6 +27,15 @@ export interface DataState {
   heatmapIntensity: number;
   heatmapColorRamp: 'inferno' | 'magma' | 'plasma' | 'viridis';
   heatmapLegendTitle: string;
+  spikeStyle: 'pointed' | 'bar';
+  spikeHeight: number;
+  spikeWidth: number;
+  spikeColor: string;
+  spikeShowValues: boolean;
+  spikeCommas: boolean;
+  spikeSuffix: string;
+  spikeShowLabels: boolean;
+  spikeLabelSize: number;
 }
 
 export interface HeatmapLegendInfo {
@@ -62,6 +71,15 @@ export const DEFAULT_DATA_STATE: DataState = {
   heatmapIntensity: 2,
   heatmapColorRamp: 'inferno',
   heatmapLegendTitle: '',
+  spikeStyle: 'pointed',
+  spikeHeight: 120,
+  spikeWidth: 6,
+  spikeColor: '#e63946',
+  spikeShowValues: false,
+  spikeCommas: false,
+  spikeSuffix: '',
+  spikeShowLabels: false,
+  spikeLabelSize: 11,
 };
 
 const LAT_NAMES = ['lat', 'latitude', 'y'];
