@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { DataState, DataRow, HeatmapLegendInfo } from '../dataStore';
 import {
-  DEFAULT_DATA_STATE, ANCHOR_POSITIONS,
+  DEFAULT_DATA_STATE,
   parseCSV, autoDetectColumns, extractPoints, getSkippedRows,
   getValueRange, pointsToGeoJSON, getSampleCSV, geocodeLocations,
 } from '../dataStore';
@@ -323,9 +323,9 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         let tipLat: number;
 
         if (d.spikeStyle === 'pointed') {
-          const tip = map.unproject({ x: base.x, y: base.y - h });
-          const left = map.unproject({ x: base.x - halfW, y: base.y });
-          const right = map.unproject({ x: base.x + halfW, y: base.y });
+          const tip = map.unproject([base.x, base.y - h]);
+          const left = map.unproject([base.x - halfW, base.y]);
+          const right = map.unproject([base.x + halfW, base.y]);
           tipLng = tip.lng; tipLat = tip.lat;
           coords = [
             [left.lng, left.lat],
@@ -334,11 +334,11 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
             [left.lng, left.lat],
           ];
         } else {
-          const tl = map.unproject({ x: base.x - halfW, y: base.y - h });
-          const tr = map.unproject({ x: base.x + halfW, y: base.y - h });
-          const br = map.unproject({ x: base.x + halfW, y: base.y });
-          const bl = map.unproject({ x: base.x - halfW, y: base.y });
-          const topCenter = map.unproject({ x: base.x, y: base.y - h });
+          const tl = map.unproject([base.x - halfW, base.y - h]);
+          const tr = map.unproject([base.x + halfW, base.y - h]);
+          const br = map.unproject([base.x + halfW, base.y]);
+          const bl = map.unproject([base.x - halfW, base.y]);
+          const topCenter = map.unproject([base.x, base.y - h]);
           tipLng = topCenter.lng; tipLat = topCenter.lat;
           coords = [
             [bl.lng, bl.lat],
