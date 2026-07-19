@@ -1564,14 +1564,22 @@ html, body, #root {
   background: #f0f7ff;
   border: 1px solid #c5ddf5;
   border-radius: 4px;
-  padding: 8px 10px;
+  padding: 10px 10px;
   margin: 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .data-geocode-prompt p {
   font-size: 12px;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
   color: #333;
-  margin: 0 0 6px;
+  margin: 0;
+}
+
+.data-geocode-prompt .data-col-row {
+  margin: 0;
 }
 
 .data-region-input {
@@ -1581,8 +1589,12 @@ html, body, #root {
   border-radius: 3px;
   font-size: 12px;
   font-family: 'Inter', Helvetica, Arial, sans-serif;
-  margin-bottom: 6px;
+  color: #333;
   box-sizing: border-box;
+}
+
+.data-region-input::placeholder {
+  color: #999;
 }
 
 .data-geocode-progress {

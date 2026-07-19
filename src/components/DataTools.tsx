@@ -84,6 +84,8 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
   const sourceAdded = useRef(false);
   const [geocoding, setGeocoding] = useState<{ active: boolean; done: number; total: number }>({ active: false, done: 0, total: 0 });
   const [regionBias, setRegionBias] = useState('');
+  const [geocodeCol, setGeocodeCol] = useState('');
+  const [geocodeContextCol, setGeocodeContextCol] = useState('');
 
   const update = useCallback((patch: Partial<DataState>) => {
     setData(prev => ({ ...prev, ...patch }));
@@ -106,11 +108,11 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     });
   }, [data.vizType, data.valueCol, data.rows, data.heatmapColorRamp, data.heatmapLegendTitle, onHeatmapLegend]);
 
-  const handleGeocode = useCallback(async (locationCol: string, rows: DataRow[], columns: string[], bias: string) => {
+  const handleGeocode = useCallback(async (locationCol: string, rows: DataRow[], columns: string[], bias: string, contextCol?: string) => {
     setGeocoding({ active: true, done: 0, total: 0 });
     const results = await geocodeLocations(rows, locationCol, (done, total) => {
       setGeocoding({ active: true, done, total });
-    }, bias.trim());
+    }, bias.trim(), contextCol);
 
     const latCol = '_geocoded_lat';
     const lngCol = '_geocoded_lng';
@@ -143,6 +145,8 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       ...detected,
     }));
     setPasteText(text);
+    setGeocodeCol(columns[0] || '');
+    setGeocodeContextCol('');
   }, []);
 
   const handlePaste = () => {
@@ -687,9 +691,32 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       )}
 
       {/* Geocode prompt */}
-      {hasData && !hasCoords && !geocoding.active && data.labelCol && (
+      {hasData && !hasCoords && !geocoding.active && data.columns.length > 0 && (
         <div className="data-geocode-prompt">
-          <p>No coordinates found. Geocode using the <strong>{data.labelCol}</strong> column?</p>
+          <p>No coordinates found. Geocode locations?</p>
+          <div className="data-col-row">
+            <span className="data-col-label">Geocode by</span>
+            <select
+              className="data-col-select"
+              value={geocodeCol}
+              onChange={e => setGeocodeCol(e.target.value)}
+            >
+              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {data.columns.length > 1 && (
+            <div className="data-col-row">
+              <span className="data-col-label">Context</span>
+              <select
+                className="data-col-select"
+                value={geocodeContextCol}
+                onChange={e => setGeocodeContextCol(e.target.value)}
+              >
+                <option value="">None</option>
+                {data.columns.filter(c => c !== geocodeCol).map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
           <input
             className="data-region-input"
             type="text"
@@ -700,9 +727,9 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           <div className="data-btn-row">
             <button
               className="data-btn data-btn-primary"
-              onClick={() => handleGeocode(data.labelCol!, data.rows, data.columns, regionBias)}
+              onClick={() => handleGeocode(geocodeCol, data.rows, data.columns, regionBias, geocodeContextCol || undefined)}
             >
-              Yes, geocode
+              Geocode
             </button>
           </div>
         </div>

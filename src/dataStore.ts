@@ -283,31 +283,37 @@ export async function geocodeLocations(
   locationCol: string,
   onProgress: (done: number, total: number) => void,
   regionBias = '',
+  contextCol?: string,
 ): Promise<GeocodeResult[]> {
   const unique = new Map<string, { lat: number; lng: number } | null>();
+  const queries = rows.map(r => {
+    const loc = (r[locationCol] ?? '').trim();
+    const ctx = contextCol ? (r[contextCol] ?? '').trim() : '';
+    return ctx && loc ? `${loc}, ${ctx}` : loc;
+  });
   const names = rows.map(r => (r[locationCol] ?? '').trim());
 
-  for (const name of names) {
-    if (name && !unique.has(name)) unique.set(name, null);
+  for (const query of queries) {
+    if (query && !unique.has(query)) unique.set(query, null);
   }
 
   let done = 0;
   const total = unique.size;
 
-  for (const name of unique.keys()) {
-    const result = await geocodeOne(name, regionBias);
-    unique.set(name, result);
+  for (const query of unique.keys()) {
+    const result = await geocodeOne(query, regionBias);
+    unique.set(query, result);
     done++;
     onProgress(done, total);
     if (done < total) await delay(1100);
   }
 
   return rows.map((_row, i) => {
-    const name = names[i];
-    const coords = name ? unique.get(name) ?? null : null;
+    const query = queries[i];
+    const coords = query ? unique.get(query) ?? null : null;
     return {
       rowIndex: i,
-      name: name || `Row ${i + 2}`,
+      name: names[i] || `Row ${i + 2}`,
       lat: coords?.lat ?? null,
       lng: coords?.lng ?? null,
     };
