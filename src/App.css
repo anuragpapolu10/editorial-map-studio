@@ -1580,6 +1580,11 @@ html, body, #root {
 
 .data-geocode-prompt .data-col-row {
   margin: 0;
+  flex-wrap: wrap;
+}
+
+.data-geocode-prompt .data-col-label {
+  width: auto;
 }
 
 .data-region-input {

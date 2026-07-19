@@ -693,9 +693,9 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       {/* Geocode prompt */}
       {hasData && !hasCoords && !geocoding.active && data.columns.length > 0 && (
         <div className="data-geocode-prompt">
-          <p>No coordinates found. Geocode locations?</p>
+          <p>No coordinates found. Look up locations?</p>
           <div className="data-col-row">
-            <span className="data-col-label">Geocode by</span>
+            <span className="data-col-label">Find coordinates for</span>
             <select
               className="data-col-select"
               value={geocodeCol}
@@ -706,7 +706,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           </div>
           {data.columns.length > 1 && (
             <div className="data-col-row">
-              <span className="data-col-label">Context</span>
+              <span className="data-col-label">Help locate with</span>
               <select
                 className="data-col-select"
                 value={geocodeContextCol}
@@ -720,7 +720,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           <input
             className="data-region-input"
             type="text"
-            placeholder="Narrow search, e.g. UK, Brazil..."
+            placeholder="Narrow search to, e.g. UK, Brazil..."
             value={regionBias}
             onChange={e => setRegionBias(e.target.value)}
           />
@@ -729,7 +729,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               className="data-btn data-btn-primary"
               onClick={() => handleGeocode(geocodeCol, data.rows, data.columns, regionBias, geocodeContextCol || undefined)}
             >
-              Geocode
+              Look up
             </button>
           </div>
         </div>
