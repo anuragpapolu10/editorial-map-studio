@@ -706,7 +706,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           </div>
           {data.columns.length > 1 && (
             <div className="data-col-row">
-              <span className="data-col-label">Help locate with</span>
+              <span className="data-col-label">Use</span>
               <select
                 className="data-col-select"
                 value={geocodeContextCol}
@@ -715,6 +715,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                 <option value="">None</option>
                 {data.columns.filter(c => c !== geocodeCol).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+              <span className="data-col-label">to help locate {geocodeCol}</span>
             </div>
           )}
           <input
