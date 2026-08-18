@@ -336,6 +336,10 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
+      minimapMap.addSource('viewport-center', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       minimapMap.addLayer({
         id: 'viewport-box-fill',
         type: 'fill',
@@ -354,6 +358,18 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
           'line-width': 1.5,
         },
       });
+      minimapMap.addLayer({
+        id: 'viewport-center-dot',
+        type: 'circle',
+        source: 'viewport-center',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': '#4a90d9',
+          'circle-opacity': 0.6,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#4a90d9',
+        },
+      });
 
       const updateBox = () => {
         const bounds = map.getBounds();
@@ -366,11 +382,24 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
           [sw.lng, ne.lat],
           [sw.lng, sw.lat],
         ];
+
+        // Check if the box is too small on screen
+        const swPx = minimapMap.project(bounds.getSouthWest());
+        const nePx = minimapMap.project(bounds.getNorthEast());
+        const boxW = Math.abs(nePx.x - swPx.x);
+        const boxH = Math.abs(nePx.y - swPx.y);
+        const tooSmall = boxW < 8 || boxH < 8;
+
         (minimapMap.getSource('viewport-box') as maplibregl.GeoJSONSource).setData({
           type: 'Feature',
           properties: {},
           geometry: { type: 'Polygon', coordinates: [ring] },
         });
+        (minimapMap.getSource('viewport-center') as maplibregl.GeoJSONSource).setData(tooSmall ? {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'Point', coordinates: [map.getCenter().lng, map.getCenter().lat] },
+        } : { type: 'FeatureCollection', features: [] });
       };
       updateBox();
       map.on('move', updateBox);
@@ -571,11 +600,23 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
 
       // --- Annotation layers ---
       if (!map.getSource('annotations')) {
-        // Create a 1×1 white pixel image for text background boxes
-        const bgSize = 1;
-        const bgData = new Uint8Array(bgSize * bgSize * 4);
-        bgData.set([255, 255, 255, 255]);
-        map.addImage('text-bg', { width: bgSize, height: bgSize, data: bgData });
+        // Create a soft-edged white image for text background glow
+        const bgSize = 64;
+        const bgCanvas = document.createElement('canvas');
+        bgCanvas.width = bgSize;
+        bgCanvas.height = bgSize;
+        const bgCtx = bgCanvas.getContext('2d')!;
+        const grad = bgCtx.createRadialGradient(
+          bgSize / 2, bgSize / 2, 0,
+          bgSize / 2, bgSize / 2, bgSize / 2,
+        );
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.6, 'rgba(255,255,255,0.9)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        bgCtx.fillStyle = grad;
+        bgCtx.fillRect(0, 0, bgSize, bgSize);
+        const bgImgData = bgCtx.getImageData(0, 0, bgSize, bgSize);
+        map.addImage('text-bg', { width: bgSize, height: bgSize, data: new Uint8Array(bgImgData.data.buffer) });
 
         map.addSource('annotations', {
           type: 'geojson',
@@ -623,7 +664,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
               'text-rotate': ['get', 'rotation'],
               'icon-image': 'text-bg',
               'icon-text-fit': 'both',
-              'icon-text-fit-padding': [4, 8, 4, 8],
+              'icon-text-fit-padding': [8, 14, 8, 14],
               'icon-allow-overlap': true,
               'icon-ignore-placement': true,
               'icon-rotate': ['get', 'rotation'],
@@ -638,7 +679,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
                 ['==', ['get', 'textStroke'], 'none'], 0,
                 1.5,
               ],
-              'icon-opacity': ['case', ['get', 'showBackground'], 0.8, 0],
+              'icon-opacity': ['case', ['get', 'showBackground'], 0.75, 0],
             },
           });
         }
