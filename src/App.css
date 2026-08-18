@@ -1497,6 +1497,7 @@ html, body, #root {
 .data-viz-types {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .data-viz-type-btn {
@@ -1703,6 +1704,52 @@ html, body, #root {
 
 .data-ramp-viridis {
   background: linear-gradient(to right, #440154, #31688e, #1f9e89, #6ece58, #fde725);
+}
+
+/* Choropleth sequential ramps */
+.data-ramp-blues {
+  background: linear-gradient(to right, #deebf7, #9ecae1, #4292c6, #2171b5, #084594);
+}
+.data-ramp-reds {
+  background: linear-gradient(to right, #fee5d9, #fcae91, #fb6a4a, #de2d26, #a50f15);
+}
+.data-ramp-greens {
+  background: linear-gradient(to right, #edf8e9, #bae4b3, #74c476, #31a354, #006d2c);
+}
+.data-ramp-purples {
+  background: linear-gradient(to right, #f2f0f7, #b4b3d8, #8888c6, #6a51a3, #3f007d);
+}
+.data-ramp-oranges {
+  background: linear-gradient(to right, #feedde, #fdbe85, #fd8d3c, #e6550d, #a63603);
+}
+
+/* Choropleth diverging ramps */
+.data-ramp-rdylgn {
+  background: linear-gradient(to right, #d73027, #fc8d59, #fee08b, #d9ef8b, #1a9850);
+}
+.data-ramp-rdbu {
+  background: linear-gradient(to right, #ca0020, #f4a582, #f7f7f7, #92c5de, #0571b0);
+}
+.data-ramp-spectral {
+  background: linear-gradient(to right, #d53e4f, #fc8d59, #fee08b, #99d594, #3288bd);
+}
+.data-ramp-piyg {
+  background: linear-gradient(to right, #c51b7d, #e9a3c9, #f7f7f7, #a1d76a, #4d9221);
+}
+
+.data-match-report {
+  font-size: 12px;
+  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  color: #333;
+}
+.data-match-report p {
+  margin: 0 0 4px 0;
+}
+
+.data-choro-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .data-lock-row {

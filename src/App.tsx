@@ -30,6 +30,7 @@ export interface OverlaySettings {
   scaleUnit: ScaleUnit;
   showCompass: boolean;
   showMinimap: boolean;
+  minimapZoomOffset: number;
 }
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
@@ -42,6 +43,7 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   scaleUnit: 'metric',
   showCompass: false,
   showMinimap: true,
+  minimapZoomOffset: -5,
 };
 
 function App() {

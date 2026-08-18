@@ -1519,6 +1519,21 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           <span className="toggle-label">Inset map</span>
         </label>
       </div>
+      {overlay.showMinimap && (
+        <div className="style-row" style={{ marginTop: 4 }}>
+          <span className="style-label">Zoom</span>
+          <input
+            type="range"
+            className="style-slider"
+            min={-8}
+            max={-1}
+            step={0.5}
+            value={overlay.minimapZoomOffset}
+            onChange={(e) => updateField('minimapZoomOffset', parseFloat(e.target.value))}
+          />
+          <span className="style-value">{overlay.minimapZoomOffset}</span>
+        </div>
+      )}
 
       <div className="export-btn-row" style={{ marginTop: 18 }}>
         <button className="action-btn" onClick={exportJpg} disabled={!map}>
