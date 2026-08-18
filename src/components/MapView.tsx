@@ -170,7 +170,9 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
     (map as any)._minimapZoomOffset = offset;
     const minimapMap = (map as any)._minimapMap as maplibregl.Map | undefined;
     if (minimapMap) {
-      minimapMap.setCenter(map.getCenter());
+      if (!(map as any)._minimapPanned) {
+        minimapMap.setCenter(map.getCenter());
+      }
       minimapMap.setZoom(Math.max(map.getZoom() + offset, 0));
     }
   }, [overlay?.minimapZoomOffset]);
@@ -315,17 +317,33 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
       },
       center: map.getCenter(),
       zoom: Math.max(map.getZoom() + (overlay?.minimapZoomOffset ?? -5), 0),
-      interactive: false,
+      interactive: true,
+      scrollZoom: false,
+      boxZoom: false,
+      doubleClickZoom: false,
+      dragRotate: false,
+      touchZoomRotate: false,
       attributionControl: false,
       preserveDrawingBuffer: true,
     } as any);
 
     (map as any)._minimapZoomOffset = overlay?.minimapZoomOffset ?? -5;
+    (map as any)._minimapPanned = false;
+    let minimapDragging = false;
+
+    minimapMap.on('dragstart', () => { minimapDragging = true; });
+    minimapMap.on('dragend', () => {
+      minimapDragging = false;
+      (map as any)._minimapPanned = true;
+    });
 
     // Sync minimap to main map movement
     const syncMinimap = () => {
+      if (minimapDragging) return;
       const offset = (map as any)._minimapZoomOffset ?? -5;
-      minimapMap.setCenter(map.getCenter());
+      if (!(map as any)._minimapPanned) {
+        minimapMap.setCenter(map.getCenter());
+      }
       minimapMap.setZoom(Math.max(map.getZoom() + offset, 0));
     };
     map.on('move', syncMinimap);

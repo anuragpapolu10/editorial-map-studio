@@ -1548,6 +1548,23 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           />
           <span className="style-value">{overlay.minimapSize}px</span>
         </div>
+        <div style={{ marginTop: 6 }}>
+          <button
+            className="action-btn"
+            style={{ fontSize: 11, padding: '3px 10px' }}
+            onClick={() => {
+              if (!map) return;
+              (map as any)._minimapPanned = false;
+              const minimapMap = (map as any)._minimapMap as maplibregl.Map | undefined;
+              if (minimapMap) {
+                const offset = (map as any)._minimapZoomOffset ?? -5;
+                minimapMap.setCenter(map.getCenter());
+                minimapMap.setZoom(Math.max(map.getZoom() + offset, 0));
+              }
+            }}
+          >Recenter inset</button>
+          <span style={{ fontSize: 11, color: '#888', marginLeft: 6 }}>Drag to pan</span>
+        </div>
         <div style={{ marginTop: 14 }}>
           <label className="layer-toggle">
             <input
