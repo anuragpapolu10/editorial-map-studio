@@ -692,7 +692,8 @@ function buildSvgExport(
       svgParts.push(`    <rect x="${ax - 4 * dpr}" y="${ay - estH + 2 * dpr}" width="${estW + 8 * dpr}" height="${estH + 4 * dpr}" rx="2" fill="#ffffff" fill-opacity="0.85"${transform} />`);
     }
 
-    const strokeAttr = ann.showStroke !== false ? ` stroke="#ffffff" stroke-width="${1.5 * dpr}" paint-order="stroke"` : '';
+    const ts = (ann as any).textStroke ?? ((ann as any).showStroke === false ? 'none' : 'white');
+    const strokeAttr = ts !== 'none' ? ` stroke="${ts === 'black' ? '#000000' : '#ffffff'}" stroke-width="${1.5 * dpr}" paint-order="stroke"` : '';
     svgParts.push(`    <text x="${ax}" y="${ay}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="${weight}" font-style="${fstyle}" fill="${ann.color}"${strokeAttr}${transform}>${escapeXml(ann.text)}</text>`);
   }
 

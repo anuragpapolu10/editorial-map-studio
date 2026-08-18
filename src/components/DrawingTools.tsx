@@ -78,7 +78,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
   const [color, setColor] = useState('#1a1a1a');
   const [rotation, setRotation] = useState(0);
   const [showBackground, setShowBackground] = useState(false);
-  const [showStroke, setShowStroke] = useState(true);
+  const [textStroke, setTextStroke] = useState<'white' | 'black' | 'none'>('white');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [annotations, setAnnotations] = useState<TextAnnotation[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -136,7 +136,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
           color: a.color,
           rotation: a.rotation,
           showBackground: a.showBackground,
-          showStroke: a.showStroke !== false,
+          textStroke: a.textStroke ?? 'white',
           selected: a.id === currentSelId,
         },
       })),
@@ -162,7 +162,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
     setColor(ann.color);
     setRotation(ann.rotation);
     setShowBackground(ann.showBackground);
-    setShowStroke(ann.showStroke !== false);
+    setTextStroke(ann.textStroke ?? ((ann as any).showStroke === false ? 'none' : 'white'));
   }, []);
 
   // Map click handler
@@ -218,7 +218,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
         color,
         rotation,
         showBackground,
-        showStroke,
+        textStroke,
       };
 
       store.add(annotation);
@@ -253,7 +253,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
     map.on('click', handleClick);
     map.on('dblclick', handleDblClick);
     return () => { map.off('click', handleClick); map.off('dblclick', handleDblClick); };
-  }, [map, active, store, selectedId, fontSize, fontFamily, fontWeight, fontStyle, color, rotation, showBackground, showStroke, loadStyleFromAnnotation]);
+  }, [map, active, store, selectedId, fontSize, fontFamily, fontWeight, fontStyle, color, rotation, showBackground, textStroke, loadStyleFromAnnotation]);
 
   // Drag to move — mousedown on annotation starts drag
   useEffect(() => {
@@ -322,7 +322,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
             id: a.id, text: a.text, fontSize: a.fontSize,
             fontFamily: a.fontFamily, fontWeight: a.fontWeight,
             fontStyle: a.fontStyle, color: a.color, rotation: a.rotation,
-            showBackground: a.showBackground, showStroke: a.showStroke !== false, selected: a.id === dragId,
+            showBackground: a.showBackground, textStroke: a.textStroke ?? 'white', selected: a.id === dragId,
           },
         })),
       });
@@ -530,19 +530,19 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
           {/* Inline text editing */}
           {editingId && (
             <div className="text-edit-row">
-              <input
+              <textarea
                 className="text-edit-input"
-                type="text"
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit();
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
                   if (e.key === 'Escape') { setEditingId(null); setEditText(''); }
                 }}
                 onBlur={commitEdit}
                 onFocus={(e) => e.target.select()}
                 autoFocus
                 placeholder="Type label..."
+                rows={editText.split('\n').length || 1}
               />
             </div>
           )}
@@ -570,6 +570,23 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
                 title="Italic"
                 style={{ fontStyle: 'italic' }}
               >I</button>
+              <button
+                className={`style-btn ${textStroke !== 'none' ? 'style-btn-on' : ''}`}
+                onClick={() => {
+                  const next = textStroke === 'white' ? 'black' : textStroke === 'black' ? 'none' : 'white';
+                  setTextStroke(next);
+                  applyStyle({ textStroke: next });
+                }}
+                title={`Text outline: ${textStroke}`}
+                style={{ position: 'relative' }}
+              ><svg width="14" height="14" viewBox="0 0 14 14" style={{ display: 'block' }}>
+                <text x="7" y="11" textAnchor="middle" fontSize="12" fontWeight="700"
+                  fill={textStroke === 'none' ? 'currentColor' : textStroke === 'white' ? '#1a1a1a' : '#fff'}
+                  stroke={textStroke === 'none' ? 'none' : textStroke}
+                  strokeWidth={textStroke === 'none' ? 0 : 2.5}
+                  paintOrder="stroke"
+                >A</text>
+              </svg></button>
             </div>
           </div>
 
@@ -579,7 +596,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
             <input
               type="range"
               min="10"
-              max="48"
+              max="72"
               value={fontSize}
               onChange={(e) => {
                 const val = Number(e.target.value);
@@ -589,7 +606,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
               className="style-slider"
             />
             <NumericInput
-              value={fontSize} min={10} max={48} unit="px"
+              value={fontSize} min={10} max={72} unit="px"
               onChange={(val) => { setFontSize(val); applyStyle({ fontSize: val }); }}
             />
           </div>
@@ -637,26 +654,6 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
                 presetColors={COLORS}
               />
             </div>
-          </div>
-
-          {/* Text stroke toggle */}
-          <div className="style-row">
-            <label className="style-label">Stroke</label>
-            <label className="layer-toggle">
-              <input
-                type="checkbox"
-                checked={showStroke}
-                onChange={() => {
-                  const val = !showStroke;
-                  setShowStroke(val);
-                  applyStyle({ showStroke: val });
-                }}
-              />
-              <span className="toggle-track toggle-track-small">
-                <span className="toggle-thumb toggle-thumb-small" />
-              </span>
-              <span className="toggle-label">Text outline</span>
-            </label>
           </div>
 
           {/* Background box toggle */}
