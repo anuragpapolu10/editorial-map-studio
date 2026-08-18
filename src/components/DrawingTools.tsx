@@ -78,6 +78,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
   const [color, setColor] = useState('#1a1a1a');
   const [rotation, setRotation] = useState(0);
   const [showBackground, setShowBackground] = useState(false);
+  const [showStroke, setShowStroke] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [annotations, setAnnotations] = useState<TextAnnotation[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -135,6 +136,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
           color: a.color,
           rotation: a.rotation,
           showBackground: a.showBackground,
+          showStroke: a.showStroke !== false,
           selected: a.id === currentSelId,
         },
       })),
@@ -160,6 +162,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
     setColor(ann.color);
     setRotation(ann.rotation);
     setShowBackground(ann.showBackground);
+    setShowStroke(ann.showStroke !== false);
   }, []);
 
   // Map click handler
@@ -215,6 +218,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
         color,
         rotation,
         showBackground,
+        showStroke,
       };
 
       store.add(annotation);
@@ -249,7 +253,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
     map.on('click', handleClick);
     map.on('dblclick', handleDblClick);
     return () => { map.off('click', handleClick); map.off('dblclick', handleDblClick); };
-  }, [map, active, store, selectedId, fontSize, fontFamily, fontWeight, fontStyle, color, rotation, showBackground, loadStyleFromAnnotation]);
+  }, [map, active, store, selectedId, fontSize, fontFamily, fontWeight, fontStyle, color, rotation, showBackground, showStroke, loadStyleFromAnnotation]);
 
   // Drag to move — mousedown on annotation starts drag
   useEffect(() => {
@@ -318,7 +322,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
             id: a.id, text: a.text, fontSize: a.fontSize,
             fontFamily: a.fontFamily, fontWeight: a.fontWeight,
             fontStyle: a.fontStyle, color: a.color, rotation: a.rotation,
-            showBackground: a.showBackground, selected: a.id === dragId,
+            showBackground: a.showBackground, showStroke: a.showStroke !== false, selected: a.id === dragId,
           },
         })),
       });
@@ -633,6 +637,26 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
                 presetColors={COLORS}
               />
             </div>
+          </div>
+
+          {/* Text stroke toggle */}
+          <div className="style-row">
+            <label className="style-label">Stroke</label>
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={showStroke}
+                onChange={() => {
+                  const val = !showStroke;
+                  setShowStroke(val);
+                  applyStyle({ showStroke: val });
+                }}
+              />
+              <span className="toggle-track toggle-track-small">
+                <span className="toggle-thumb toggle-thumb-small" />
+              </span>
+              <span className="toggle-label">Text outline</span>
+            </label>
           </div>
 
           {/* Background box toggle */}

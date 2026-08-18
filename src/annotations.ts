@@ -12,6 +12,7 @@ export interface TextAnnotation {
   color: string;
   rotation: number; // degrees, 0 = horizontal
   showBackground: boolean;
+  showStroke: boolean;
 }
 
 type Action =

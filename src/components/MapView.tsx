@@ -565,7 +565,7 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
             paint: {
               'text-color': ['get', 'color'],
               'text-halo-color': '#ffffff',
-              'text-halo-width': 1.5,
+              'text-halo-width': ['case', ['get', 'showStroke'], 1.5, 0],
               'icon-opacity': ['case', ['get', 'showBackground'], 0.8, 0],
             },
           });
