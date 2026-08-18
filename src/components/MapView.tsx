@@ -175,6 +175,56 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
     }
   }, [overlay?.minimapZoomOffset]);
 
+  // Sync minimap size from sidebar slider
+  useEffect(() => {
+    const container = containerRef.current;
+    const map = mapRef.current;
+    if (!container || !map) return;
+    const el = container.querySelector('#inset-minimap') as HTMLElement;
+    if (!el) return;
+    const size = overlay?.minimapSize ?? 180;
+    const height = Math.round(size * 130 / 180);
+    el.style.width = `${size}px`;
+    el.style.height = `${height}px`;
+    const minimapMap = (map as any)._minimapMap as maplibregl.Map | undefined;
+    if (minimapMap) minimapMap.resize();
+  }, [overlay?.minimapSize]);
+
+  // Toggle minimap labels
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const minimapMap = (map as any)._minimapMap as maplibregl.Map | undefined;
+    if (!minimapMap) return;
+
+    const showLabels = overlay?.minimapShowLabels !== false;
+    const showCountries = showLabels && overlay?.minimapShowCountries !== false;
+    const showStates = showLabels && overlay?.minimapShowStates !== false;
+    const showCities = showLabels && overlay?.minimapShowCities !== false;
+
+    const groups: Record<string, boolean> = {
+      'places_country': showCountries,
+      'places_region': showStates,
+      'places_locality': showCities,
+      'places_subplace': showCities,
+      'address_label': showLabels,
+      'water_waterway_label': showLabels,
+      'roads_oneway': showLabels,
+      'roads_labels_minor': showLabels,
+      'water_label_ocean': showLabels,
+      'earth_label_islands': showLabels,
+      'water_label_lakes': showLabels,
+      'roads_shields': showLabels,
+      'roads_labels_major': showLabels,
+    };
+
+    for (const [id, show] of Object.entries(groups)) {
+      if (minimapMap.getLayer(id)) {
+        minimapMap.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none');
+      }
+    }
+  }, [overlay?.minimapShowLabels, overlay?.minimapShowCountries, overlay?.minimapShowStates, overlay?.minimapShowCities]);
+
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 

@@ -31,6 +31,11 @@ export interface OverlaySettings {
   showCompass: boolean;
   showMinimap: boolean;
   minimapZoomOffset: number;
+  minimapSize: number;
+  minimapShowLabels: boolean;
+  minimapShowCountries: boolean;
+  minimapShowStates: boolean;
+  minimapShowCities: boolean;
 }
 
 export const DEFAULT_OVERLAY: OverlaySettings = {
@@ -44,6 +49,11 @@ export const DEFAULT_OVERLAY: OverlaySettings = {
   showCompass: false,
   showMinimap: true,
   minimapZoomOffset: -5,
+  minimapSize: 180,
+  minimapShowLabels: true,
+  minimapShowCountries: true,
+  minimapShowStates: true,
+  minimapShowCities: true,
 };
 
 function App() {

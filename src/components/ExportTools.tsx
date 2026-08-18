@@ -882,11 +882,12 @@ async function drawMinimap(
   canvasH: number,
   minimapDataUrl: string,
   dpr = 1,
+  minimapSize = 180,
 ) {
   const img = await loadImage(minimapDataUrl);
 
-  const insetW = 180 * dpr;
-  const insetH = 130 * dpr;
+  const insetW = minimapSize * dpr;
+  const insetH = Math.round(minimapSize * 130 / 180) * dpr;
   const pad = 10 * dpr;
   const bottomOffset = 80 * dpr; // match CSS positioning
   const border = 1.5 * dpr;
@@ -1030,7 +1031,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
         c.width = img.width; c.height = img.height;
         const cx = c.getContext('2d')!;
         cx.drawImage(img, 0, 0);
-        await drawMinimap(cx, c.width, c.height, minimapDataUrl, dpr);
+        await drawMinimap(cx, c.width, c.height, minimapDataUrl, dpr, overlay.minimapSize);
         dataUrl = c.toDataURL('image/jpeg', 0.92);
       }
     }
@@ -1174,7 +1175,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
         insetCanvas.width = cw;
         insetCanvas.height = ch;
         const insetCtx = insetCanvas.getContext('2d')!;
-        await drawMinimap(insetCtx, cw, ch, minimapDataUrl, dpr);
+        await drawMinimap(insetCtx, cw, ch, minimapDataUrl, dpr, overlay.minimapSize);
         await downloadDataUrl(insetCanvas.toDataURL('image/png'), 'map-inset.png');
       }
     }
@@ -1519,13 +1520,13 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           <span className="toggle-label">Inset map</span>
         </label>
       </div>
-      {overlay.showMinimap && (
-        <div className="style-row" style={{ marginTop: 4 }}>
+      {overlay.showMinimap && (<>
+        <div className="style-row">
           <span className="style-label">Zoom</span>
           <input
             type="range"
             className="style-slider"
-            min={-8}
+            min={-14}
             max={-1}
             step={0.5}
             value={overlay.minimapZoomOffset}
@@ -1533,9 +1534,72 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           />
           <span className="style-value">{overlay.minimapZoomOffset}</span>
         </div>
-      )}
+        <div className="style-row">
+          <span className="style-label">Size</span>
+          <input
+            type="range"
+            className="style-slider"
+            min={120}
+            max={400}
+            step={10}
+            value={overlay.minimapSize}
+            onChange={(e) => updateField('minimapSize', parseInt(e.target.value))}
+          />
+          <span className="style-value">{overlay.minimapSize}px</span>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <label className="layer-toggle">
+            <input
+              type="checkbox"
+              checked={overlay.minimapShowLabels}
+              onChange={(e) => updateField('minimapShowLabels', e.target.checked)}
+            />
+            <span className="toggle-track toggle-track-small">
+              <span className="toggle-thumb toggle-thumb-small" />
+            </span>
+            <span className="toggle-label">Labels</span>
+          </label>
+        </div>
+        {overlay.minimapShowLabels && (
+          <div className="layer-children">
+            <label className="layer-toggle layer-toggle-child">
+              <input
+                type="checkbox"
+                checked={overlay.minimapShowCountries}
+                onChange={(e) => updateField('minimapShowCountries', e.target.checked)}
+              />
+              <span className="toggle-track toggle-track-small">
+                <span className="toggle-thumb toggle-thumb-small" />
+              </span>
+              <span className="toggle-label">Countries</span>
+            </label>
+            <label className="layer-toggle layer-toggle-child">
+              <input
+                type="checkbox"
+                checked={overlay.minimapShowStates}
+                onChange={(e) => updateField('minimapShowStates', e.target.checked)}
+              />
+              <span className="toggle-track toggle-track-small">
+                <span className="toggle-thumb toggle-thumb-small" />
+              </span>
+              <span className="toggle-label">States / Provinces</span>
+            </label>
+            <label className="layer-toggle layer-toggle-child">
+              <input
+                type="checkbox"
+                checked={overlay.minimapShowCities}
+                onChange={(e) => updateField('minimapShowCities', e.target.checked)}
+              />
+              <span className="toggle-track toggle-track-small">
+                <span className="toggle-thumb toggle-thumb-small" />
+              </span>
+              <span className="toggle-label">Cities</span>
+            </label>
+          </div>
+        )}
+      </>)}
 
-      <div className="export-btn-row" style={{ marginTop: 18 }}>
+      <div className="export-btn-row" style={{ marginTop: 28, paddingTop: 14, borderTop: '1px solid #e8e5de' }}>
         <button className="action-btn" onClick={exportJpg} disabled={!map}>
           Export JPG
         </button>
