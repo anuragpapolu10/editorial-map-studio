@@ -1219,7 +1219,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               disabled={!data.valueCol}
               title={!data.valueCol ? 'Pick a value column first' : ''}
             >
-              Regions
+              Choropleth
             </button>
           </div>
 
