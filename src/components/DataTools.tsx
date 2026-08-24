@@ -7,7 +7,7 @@ import {
   getValueRange, pointsToGeoJSON, getSampleCSV, geocodeLocations,
 } from '../dataStore';
 import { ColorPickerPopover } from './ColorPickerPopover';
-import type { ChoroplethBoundary, MatchReport, RegionType } from '../choropleth';
+import type { ChoroplethBoundary, MatchReport } from '../choropleth';
 import {
   fetchBoundaries, matchRegions, getAdminLevel,
   buildChoroplethGeoJSON, buildFillColorExpression, getChoroplethValueRange,
@@ -1476,7 +1476,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                   </>
                 )}
               </>
-            ) : data.vizType !== 'heatmap' && data.vizType !== 'choropleth' ? (
+            ) : data.vizType !== 'heatmap' ? (
               <>
                 <div className="style-row">
                   <span className="style-label">Color</span>
