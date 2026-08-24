@@ -15,7 +15,8 @@
     "pmtiles": "^4.4.1",
     "react": "^19.2.6",
     "react-colorful": "^5.7.0",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "shpjs": "^6.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

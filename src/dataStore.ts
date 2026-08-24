@@ -10,7 +10,7 @@ export interface DataState {
   lngCol: string | null;
   valueCol: string | null;
   labelCol: string | null;
-  vizType: 'points' | 'bubbles' | 'heatmap' | 'spikes';
+  vizType: 'points' | 'bubbles' | 'heatmap' | 'spikes' | 'choropleth';
   pointColor: string;
   pointRadius: number;
   maxRadius: number;
@@ -36,6 +36,20 @@ export interface DataState {
   spikeSuffix: string;
   spikeShowLabels: boolean;
   spikeLabelSize: number;
+  choroplethRegionCol: string | null;
+  choroplethCountryCode: string;
+  choroplethRegionType: 'states' | 'counties' | 'cities';
+  choroplethColorScale: 'sequential' | 'diverging';
+  choroplethColorRamp: string;
+  choroplethStrokeColor: string;
+  choroplethStrokeWidth: number;
+  choroplethShowLabels: boolean;
+  choroplethShowValues: boolean;
+  choroplethLegendTitle: string;
+  choroplethMissingColor: string;
+  choroplethCommas: boolean;
+  choroplethPrefix: string;
+  choroplethSuffix: string;
 }
 
 export interface HeatmapLegendInfo {
@@ -80,6 +94,20 @@ export const DEFAULT_DATA_STATE: DataState = {
   spikeSuffix: '',
   spikeShowLabels: false,
   spikeLabelSize: 11,
+  choroplethRegionCol: null,
+  choroplethCountryCode: '',
+  choroplethRegionType: 'states',
+  choroplethColorScale: 'sequential',
+  choroplethColorRamp: 'blues',
+  choroplethStrokeColor: '#333333',
+  choroplethStrokeWidth: 1,
+  choroplethShowLabels: false,
+  choroplethShowValues: false,
+  choroplethLegendTitle: '',
+  choroplethMissingColor: '#e0e0e0',
+  choroplethCommas: false,
+  choroplethPrefix: '',
+  choroplethSuffix: '',
 };
 
 const LAT_NAMES = ['lat', 'latitude', 'y'];

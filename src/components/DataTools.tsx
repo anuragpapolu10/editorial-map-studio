@@ -7,6 +7,14 @@ import {
   getValueRange, pointsToGeoJSON, getSampleCSV, geocodeLocations,
 } from '../dataStore';
 import { ColorPickerPopover } from './ColorPickerPopover';
+import type { ChoroplethBoundary, MatchReport, RegionType } from '../choropleth';
+import {
+  fetchBoundaries, matchRegions, getAdminLevel,
+  buildChoroplethGeoJSON, buildFillColorExpression, getChoroplethValueRange,
+  SEQUENTIAL_RAMPS, DIVERGING_RAMPS,
+} from '../choropleth';
+import type { UploadedGeoData } from '../geojsonUpload';
+import { parseGeoFile, getGeometryType, getBounds } from '../geojsonUpload';
 
 const SOURCE_ID = 'data-points-source';
 const LAYER_ID = 'data-points-layer';
@@ -20,6 +28,22 @@ const SPIKE_LABELS_SOURCE_ID = 'data-spike-labels-source';
 const SPIKE_LABELS_LAYER_ID = 'data-spike-labels-layer';
 const SPIKE_BASE_LABELS_SOURCE_ID = 'data-spike-base-labels-source';
 const SPIKE_BASE_LABELS_LAYER_ID = 'data-spike-base-labels-layer';
+const CHOROPLETH_SOURCE_ID = 'data-choropleth-source';
+const CHOROPLETH_FILL_LAYER_ID = 'data-choropleth-fill-layer';
+const CHOROPLETH_STROKE_LAYER_ID = 'data-choropleth-stroke-layer';
+const CHOROPLETH_LABEL_LAYER_ID = 'data-choropleth-label-layer';
+interface GeoLayer {
+  id: string;
+  data: UploadedGeoData;
+  fillColor: string;
+  fillOpacity: number;
+  strokeColor: string;
+  strokeWidth: number;
+  showLabels: boolean;
+  labelCol: string | null;
+}
+
+let geoLayerCounter = 0;
 
 const HEATMAP_RAMPS: Record<string, maplibregl.ExpressionSpecification> = {
   inferno: [
@@ -86,6 +110,14 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
   const [regionBias, setRegionBias] = useState('');
   const [geocodeCol, setGeocodeCol] = useState('');
   const [geocodeContextCol, setGeocodeContextCol] = useState('');
+  const [choroBoundaries, setChoroBoundaries] = useState<ChoroplethBoundary[] | null>(null);
+  const [choroMatchReport, setChoroMatchReport] = useState<MatchReport | null>(null);
+  const [choroFetching, setChoroFetching] = useState<{ active: boolean; msg: string }>({ active: false, msg: '' });
+  const choroSourceAdded = useRef(false);
+  const [geoLayers, setGeoLayers] = useState<GeoLayer[]>([]);
+  const [geoUploadError, setGeoUploadError] = useState<string | null>(null);
+  const [expandedGeoLayers, setExpandedGeoLayers] = useState<Set<string>>(new Set());
+  const geoFileRef = useRef<HTMLInputElement>(null);
 
   const update = useCallback((patch: Partial<DataState>) => {
     setData(prev => ({ ...prev, ...patch }));
@@ -187,7 +219,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     }
 
     // Circle layer: add if needed, toggle visibility based on vizType
-    if (data.vizType !== 'heatmap' && data.vizType !== 'spikes') {
+    if (data.vizType !== 'heatmap' && data.vizType !== 'spikes' && data.vizType !== 'choropleth') {
       if (!map.getLayer(LAYER_ID) && sourceAdded.current) {
         map.addLayer({
           id: LAYER_ID,
@@ -618,10 +650,304 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     map.fitBounds(bounds, { padding: 60, maxZoom: 12 });
   }, [map, data.rows, data.latCol, data.lngCol, data.raw]);
 
+  // Fetch choropleth boundaries
+  const handleFetchBoundaries = useCallback(async () => {
+    const regionCol = data.choroplethRegionCol || data.labelCol || data.columns[0];
+    if (!regionCol || !data.choroplethCountryCode) return;
+    setChoroFetching({ active: true, msg: 'Querying boundaries...' });
+    try {
+      const adminLevel = getAdminLevel(data.choroplethCountryCode, data.choroplethRegionType);
+      const raw = await fetchBoundaries(data.choroplethCountryCode, adminLevel, msg => {
+        setChoroFetching({ active: true, msg });
+      });
+      const csvNames = data.rows.map(r => (r[regionCol] ?? '').trim());
+      const { boundaries, report } = matchRegions(csvNames, raw, data.choroplethCountryCode);
+      setChoroBoundaries(boundaries);
+      setChoroMatchReport(report);
+
+      // Zoom to boundaries
+      if (map && boundaries.length > 0) {
+        const bounds = new maplibregl.LngLatBounds();
+        for (const b of boundaries) {
+          const visitCoords = (coords: number[][]) => {
+            for (const c of coords) bounds.extend([c[0], c[1]] as [number, number]);
+          };
+          if (b.geometry.type === 'Polygon') {
+            for (const ring of (b.geometry as GeoJSON.Polygon).coordinates) visitCoords(ring);
+          } else if (b.geometry.type === 'MultiPolygon') {
+            for (const poly of (b.geometry as GeoJSON.MultiPolygon).coordinates)
+              for (const ring of poly) visitCoords(ring);
+          }
+        }
+        map.fitBounds(bounds, { padding: 60, maxZoom: 8 });
+      }
+    } catch (err) {
+      console.error('Boundary fetch failed:', err);
+      setChoroMatchReport({ matched: 0, total: 0, unmatched: ['Fetch failed — check country code and try again'] });
+    }
+    setChoroFetching({ active: false, msg: '' });
+  }, [map, data.choroplethRegionCol, data.labelCol, data.columns, data.choroplethCountryCode, data.choroplethRegionType, data.rows]);
+
+  // Manage choropleth layers
+  useEffect(() => {
+    if (!map) return;
+    if (data.vizType !== 'choropleth' || !choroBoundaries || choroBoundaries.length === 0) {
+      if (map.getLayer(CHOROPLETH_LABEL_LAYER_ID)) map.setLayoutProperty(CHOROPLETH_LABEL_LAYER_ID, 'visibility', 'none');
+      if (map.getLayer(CHOROPLETH_STROKE_LAYER_ID)) map.setLayoutProperty(CHOROPLETH_STROKE_LAYER_ID, 'visibility', 'none');
+      if (map.getLayer(CHOROPLETH_FILL_LAYER_ID)) map.setLayoutProperty(CHOROPLETH_FILL_LAYER_ID, 'visibility', 'none');
+      return;
+    }
+
+    const regionCol = data.choroplethRegionCol || data.labelCol || data.columns[0];
+    const geojson = buildChoroplethGeoJSON(
+      choroBoundaries, data.rows, data.valueCol, regionCol,
+      data.choroplethCommas, data.choroplethPrefix, data.choroplethSuffix,
+    );
+
+    if (!map.getSource(CHOROPLETH_SOURCE_ID)) {
+      map.addSource(CHOROPLETH_SOURCE_ID, { type: 'geojson', data: geojson });
+      choroSourceAdded.current = true;
+    } else {
+      (map.getSource(CHOROPLETH_SOURCE_ID) as maplibregl.GeoJSONSource).setData(geojson);
+    }
+
+    const { min, max } = getChoroplethValueRange(choroBoundaries, data.rows, data.valueCol);
+    const ramps = data.choroplethColorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS;
+    const ramp = ramps[data.choroplethColorRamp] || Object.values(ramps)[0];
+    const fillExpr = buildFillColorExpression(ramp, min, max, data.choroplethMissingColor);
+
+    // Insert choropleth below basemap labels
+    const firstSymbolLayer = map.getStyle().layers.find(l => l.type === 'symbol' && !l.id.startsWith('data-'));
+    const beforeId = firstSymbolLayer?.id;
+
+    if (!map.getLayer(CHOROPLETH_FILL_LAYER_ID)) {
+      map.addLayer({
+        id: CHOROPLETH_FILL_LAYER_ID,
+        type: 'fill',
+        source: CHOROPLETH_SOURCE_ID,
+        paint: {
+          'fill-color': fillExpr as any,
+          'fill-opacity': data.opacity,
+        },
+      }, beforeId);
+    } else {
+      map.setPaintProperty(CHOROPLETH_FILL_LAYER_ID, 'fill-color', fillExpr);
+      map.setPaintProperty(CHOROPLETH_FILL_LAYER_ID, 'fill-opacity', data.opacity);
+    }
+    map.setLayoutProperty(CHOROPLETH_FILL_LAYER_ID, 'visibility', 'visible');
+
+    if (!map.getLayer(CHOROPLETH_STROKE_LAYER_ID)) {
+      map.addLayer({
+        id: CHOROPLETH_STROKE_LAYER_ID,
+        type: 'line',
+        source: CHOROPLETH_SOURCE_ID,
+        paint: {
+          'line-color': data.choroplethStrokeColor,
+          'line-width': data.choroplethStrokeWidth,
+          'line-opacity': data.opacity,
+        },
+      }, beforeId);
+    } else {
+      map.setPaintProperty(CHOROPLETH_STROKE_LAYER_ID, 'line-color', data.choroplethStrokeColor);
+      map.setPaintProperty(CHOROPLETH_STROKE_LAYER_ID, 'line-width', data.choroplethStrokeWidth);
+      map.setPaintProperty(CHOROPLETH_STROKE_LAYER_ID, 'line-opacity', data.opacity);
+    }
+    map.setLayoutProperty(CHOROPLETH_STROKE_LAYER_ID, 'visibility', 'visible');
+
+    if (data.choroplethShowLabels || data.choroplethShowValues) {
+      const textField = data.choroplethShowValues && data.choroplethShowLabels
+        ? ['concat', ['get', 'label'], '\n', ['get', 'formattedValue']]
+        : data.choroplethShowValues
+          ? ['get', 'formattedValue']
+          : ['get', 'label'];
+      if (!map.getLayer(CHOROPLETH_LABEL_LAYER_ID)) {
+        map.addLayer({
+          id: CHOROPLETH_LABEL_LAYER_ID,
+          type: 'symbol',
+          source: CHOROPLETH_SOURCE_ID,
+          layout: {
+            'text-field': textField as any,
+            'text-size': 11,
+            'text-allow-overlap': false,
+            'symbol-placement': 'point',
+          },
+          paint: {
+            'text-color': '#333',
+            'text-halo-color': '#fff',
+            'text-halo-width': 1.5,
+          },
+        });
+      } else {
+        map.setLayoutProperty(CHOROPLETH_LABEL_LAYER_ID, 'text-field', textField);
+      }
+      map.setLayoutProperty(CHOROPLETH_LABEL_LAYER_ID, 'visibility', 'visible');
+    } else {
+      if (map.getLayer(CHOROPLETH_LABEL_LAYER_ID)) {
+        map.setLayoutProperty(CHOROPLETH_LABEL_LAYER_ID, 'visibility', 'none');
+      }
+    }
+  }, [map, data.vizType, choroBoundaries, data.rows, data.valueCol, data.labelCol, data.columns,
+    data.choroplethRegionCol, data.choroplethColorScale, data.choroplethColorRamp,
+    data.choroplethStrokeColor, data.choroplethStrokeWidth, data.choroplethMissingColor,
+    data.choroplethShowLabels, data.choroplethShowValues, data.choroplethCommas,
+    data.choroplethPrefix, data.choroplethSuffix, data.opacity]);
+
+  // Manage GeoJSON upload layers (multi-file)
+  const geoLayerIdsRef = useRef<Set<string>>(new Set());
+
+  const removeGeoMapLayers = useCallback((id: string) => {
+    if (!map) return;
+    const src = `geo-${id}-source`;
+    [`geo-${id}-label`, `geo-${id}-point`, `geo-${id}-stroke`, `geo-${id}-fill`].forEach(lid => {
+      if (map.getLayer(lid)) map.removeLayer(lid);
+    });
+    if (map.getSource(src)) map.removeSource(src);
+    geoLayerIdsRef.current.delete(id);
+  }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+
+    const firstSymbolLayer = map.getStyle().layers.find(l => l.type === 'symbol' && !l.id.startsWith('data-') && !l.id.startsWith('geo-'));
+    const beforeId = firstSymbolLayer?.id;
+
+    const activeIds = new Set(geoLayers.map(l => l.id));
+    for (const id of Array.from(geoLayerIdsRef.current)) {
+      if (!activeIds.has(id)) removeGeoMapLayers(id);
+    }
+
+    for (const layer of geoLayers) {
+      const src = `geo-${layer.id}-source`;
+      const fillId = `geo-${layer.id}-fill`;
+      const strokeId = `geo-${layer.id}-stroke`;
+      const pointId = `geo-${layer.id}-point`;
+      const labelId = `geo-${layer.id}-label`;
+      const geoType = getGeometryType(layer.data.geojson);
+
+      if (!map.getSource(src)) {
+        map.addSource(src, { type: 'geojson', data: layer.data.geojson });
+        geoLayerIdsRef.current.add(layer.id);
+      } else {
+        (map.getSource(src) as maplibregl.GeoJSONSource).setData(layer.data.geojson);
+      }
+
+      if (geoType === 'polygon' || geoType === 'mixed') {
+        if (!map.getLayer(fillId)) {
+          map.addLayer({
+            id: fillId, type: 'fill', source: src,
+            filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
+            paint: { 'fill-color': layer.fillColor, 'fill-opacity': layer.fillOpacity },
+          }, beforeId);
+        } else {
+          map.setPaintProperty(fillId, 'fill-color', layer.fillColor);
+          map.setPaintProperty(fillId, 'fill-opacity', layer.fillOpacity);
+        }
+      }
+
+      if (geoType === 'polygon' || geoType === 'line' || geoType === 'mixed') {
+        if (!map.getLayer(strokeId)) {
+          map.addLayer({
+            id: strokeId, type: 'line', source: src,
+            filter: ['any',
+              ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon'],
+              ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'MultiLineString'],
+            ],
+            paint: { 'line-color': layer.strokeColor, 'line-width': layer.strokeWidth, 'line-opacity': 1 },
+          }, beforeId);
+        } else {
+          map.setPaintProperty(strokeId, 'line-color', layer.strokeColor);
+          map.setPaintProperty(strokeId, 'line-width', layer.strokeWidth);
+        }
+      }
+
+      if (geoType === 'point' || geoType === 'mixed') {
+        if (!map.getLayer(pointId)) {
+          map.addLayer({
+            id: pointId, type: 'circle', source: src,
+            filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+            paint: {
+              'circle-radius': 5, 'circle-color': layer.fillColor,
+              'circle-opacity': layer.fillOpacity,
+              'circle-stroke-width': layer.strokeWidth, 'circle-stroke-color': layer.strokeColor,
+            },
+          });
+        } else {
+          map.setPaintProperty(pointId, 'circle-color', layer.fillColor);
+          map.setPaintProperty(pointId, 'circle-opacity', layer.fillOpacity);
+          map.setPaintProperty(pointId, 'circle-stroke-width', layer.strokeWidth);
+          map.setPaintProperty(pointId, 'circle-stroke-color', layer.strokeColor);
+        }
+      }
+
+      if (layer.showLabels && layer.labelCol) {
+        if (!map.getLayer(labelId)) {
+          map.addLayer({
+            id: labelId, type: 'symbol', source: src,
+            layout: { 'text-field': ['get', layer.labelCol], 'text-size': 11, 'text-allow-overlap': false },
+            paint: { 'text-color': '#333', 'text-halo-color': '#fff', 'text-halo-width': 1.5 },
+          });
+        } else {
+          map.setLayoutProperty(labelId, 'text-field', ['get', layer.labelCol]);
+        }
+        map.setLayoutProperty(labelId, 'visibility', 'visible');
+      } else {
+        if (map.getLayer(labelId)) map.setLayoutProperty(labelId, 'visibility', 'none');
+      }
+    }
+  }, [map, geoLayers, removeGeoMapLayers]);
+
+  const FILL_COLORS = ['#4a90d9', '#2a9d8f', '#e63946', '#e9c46a', '#6a4c93', '#f4a261', '#264653', '#ff6b6b'];
+
+  const handleGeoFileUpload = useCallback(async (file: File) => {
+    setGeoUploadError(null);
+    try {
+      const result = await parseGeoFile(file);
+      const nameCol = result.columns.find(c => /^(name|label|title)$/i.test(c)) || result.columns[0] || null;
+      const newLayer: GeoLayer = {
+        id: `upload-${++geoLayerCounter}`,
+        data: result,
+        fillColor: FILL_COLORS[geoLayers.length % FILL_COLORS.length],
+        fillOpacity: 0.3,
+        strokeColor: '#1a1a1a',
+        strokeWidth: 1.5,
+        showLabels: false,
+        labelCol: nameCol,
+      };
+      setGeoLayers(prev => [...prev, newLayer]);
+      setExpandedGeoLayers(prev => new Set(prev).add(newLayer.id));
+      if (map) {
+        const bounds = getBounds(result.geojson);
+        if (bounds) map.fitBounds(bounds as [number, number, number, number], { padding: 60, maxZoom: 12 });
+      }
+    } catch (err: any) {
+      setGeoUploadError(err.message || 'Failed to parse file');
+    }
+  }, [map, geoLayers.length]);
+
+  const updateGeoLayer = useCallback((id: string, patch: Partial<GeoLayer>) => {
+    setGeoLayers(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+  }, []);
+
+  const removeGeoLayer = useCallback((id: string) => {
+    removeGeoMapLayers(id);
+    setGeoLayers(prev => prev.filter(l => l.id !== id));
+  }, [removeGeoMapLayers]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (map) {
+        for (const id of Array.from(geoLayerIdsRef.current)) {
+          [`geo-${id}-label`, `geo-${id}-point`, `geo-${id}-stroke`, `geo-${id}-fill`].forEach(lid => {
+            if (map.getLayer(lid)) map.removeLayer(lid);
+          });
+          if (map.getSource(`geo-${id}-source`)) map.removeSource(`geo-${id}-source`);
+        }
+        geoLayerIdsRef.current.clear();
+        if (map.getLayer(CHOROPLETH_LABEL_LAYER_ID)) map.removeLayer(CHOROPLETH_LABEL_LAYER_ID);
+        if (map.getLayer(CHOROPLETH_STROKE_LAYER_ID)) map.removeLayer(CHOROPLETH_STROKE_LAYER_ID);
+        if (map.getLayer(CHOROPLETH_FILL_LAYER_ID)) map.removeLayer(CHOROPLETH_FILL_LAYER_ID);
+        if (map.getSource(CHOROPLETH_SOURCE_ID)) map.removeSource(CHOROPLETH_SOURCE_ID);
         if (map.getLayer(VALUE_LAYER_ID)) map.removeLayer(VALUE_LAYER_ID);
         if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
         if (map.getLayer(HEATMAP_LAYER_ID)) map.removeLayer(HEATMAP_LAYER_ID);
@@ -635,6 +961,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         if (map.getSource(SPIKE_SOURCE_ID)) map.removeSource(SPIKE_SOURCE_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
         sourceAdded.current = false;
+        choroSourceAdded.current = false;
       }
     };
   }, [map]);
@@ -804,8 +1131,8 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         </div>
       )}
 
-      {/* Step 3: Viz options — revealed after coordinates are set */}
-      {hasData && hasCoords && (
+      {/* Step 3: Viz options — revealed after coordinates are set or data loaded */}
+      {hasData && (hasCoords || data.vizType === 'choropleth' || data.valueCol) && (
         <div className="data-viz-options">
           <div className="data-columns-header">Visualization</div>
 
@@ -813,30 +1140,42 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
             <button
               className={`data-viz-type-btn ${data.vizType === 'points' ? 'active' : ''}`}
               onClick={() => update({ vizType: 'points' })}
+              disabled={!hasCoords}
+              title={!hasCoords ? 'Set coordinates first' : ''}
             >
               Points
             </button>
             <button
               className={`data-viz-type-btn ${data.vizType === 'bubbles' ? 'active' : ''}`}
               onClick={() => update({ vizType: 'bubbles' })}
-              disabled={!data.valueCol}
-              title={!data.valueCol ? 'Pick a value column first' : ''}
+              disabled={!data.valueCol || !hasCoords}
+              title={!hasCoords ? 'Set coordinates first' : !data.valueCol ? 'Pick a value column first' : ''}
             >
               Bubbles
             </button>
             <button
               className={`data-viz-type-btn ${data.vizType === 'spikes' ? 'active' : ''}`}
               onClick={() => update({ vizType: 'spikes' })}
-              disabled={!data.valueCol}
-              title={!data.valueCol ? 'Pick a value column first' : ''}
+              disabled={!data.valueCol || !hasCoords}
+              title={!hasCoords ? 'Set coordinates first' : !data.valueCol ? 'Pick a value column first' : ''}
             >
               Spikes
             </button>
             <button
               className={`data-viz-type-btn ${data.vizType === 'heatmap' ? 'active' : ''}`}
               onClick={() => update({ vizType: 'heatmap' })}
+              disabled={!hasCoords}
+              title={!hasCoords ? 'Set coordinates first' : ''}
             >
               Heatmap
+            </button>
+            <button
+              className={`data-viz-type-btn ${data.vizType === 'choropleth' ? 'active' : ''}`}
+              onClick={() => update({ vizType: 'choropleth', choroplethRegionCol: data.choroplethRegionCol || data.labelCol || data.columns[0] || null })}
+              disabled={!data.valueCol}
+              title={!data.valueCol ? 'Pick a value column first' : ''}
+            >
+              Regions
             </button>
           </div>
 
@@ -951,7 +1290,193 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                   </>
                 )}
               </>
-            ) : data.vizType !== 'heatmap' ? (
+            ) : data.vizType === 'choropleth' ? (
+              <>
+                {/* Boundary setup */}
+                {!choroBoundaries && !choroFetching.active && (
+                  <div className="data-choro-setup">
+                    <div className="style-row">
+                      <span className="style-label">Region</span>
+                      <select
+                        className="data-col-select"
+                        value={data.choroplethRegionCol || data.labelCol || data.columns[0] || ''}
+                        onChange={e => update({ choroplethRegionCol: e.target.value || null })}
+                      >
+                        {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Country</span>
+                      <input
+                        className="data-unit-input"
+                        type="text"
+                        placeholder="US, GB, FR..."
+                        value={data.choroplethCountryCode}
+                        onChange={e => update({ choroplethCountryCode: e.target.value.toUpperCase().slice(0, 2) })}
+                        style={{ width: 60, textTransform: 'uppercase' }}
+                      />
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Type</span>
+                      <div className="data-viz-types" style={{ gap: 0 }}>
+                        {(['states', 'counties', 'cities'] as const).map(t => (
+                          <button
+                            key={t}
+                            className={`data-viz-type-btn ${data.choroplethRegionType === t ? 'active' : ''}`}
+                            onClick={() => update({ choroplethRegionType: t })}
+                          >
+                            {t === 'states' ? 'States' : t === 'counties' ? 'Counties' : 'Cities'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="data-btn-row">
+                      <button
+                        className="data-btn data-btn-primary"
+                        onClick={handleFetchBoundaries}
+                        disabled={!data.choroplethCountryCode}
+                      >
+                        Fetch boundaries
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fetch progress */}
+                {choroFetching.active && (
+                  <div className="data-geocode-progress">
+                    <p>{choroFetching.msg}</p>
+                  </div>
+                )}
+
+                {/* Match report */}
+                {choroMatchReport && (
+                  <div className="data-match-report">
+                    <p>{choroMatchReport.matched} of {choroMatchReport.total} regions matched</p>
+                    {choroMatchReport.unmatched.length > 0 && (
+                      <div className="data-skipped-list">
+                        {choroMatchReport.unmatched.map((name, i) => (
+                          <div key={i} className="data-skipped-item">
+                            <span className="data-skipped-name">{name}</span>
+                            <span className="data-skipped-reason">not matched</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      className="data-btn"
+                      style={{ marginTop: 6, fontSize: 11 }}
+                      onClick={() => { setChoroBoundaries(null); setChoroMatchReport(null); }}
+                    >
+                      Change boundaries
+                    </button>
+                  </div>
+                )}
+
+                {/* Choropleth style controls — shown after boundaries are fetched */}
+                {choroBoundaries && (
+                  <>
+                    <div className="style-row">
+                      <span className="style-label">Scale</span>
+                      <div className="data-viz-types" style={{ gap: 0 }}>
+                        <button
+                          className={`data-viz-type-btn ${data.choroplethColorScale === 'sequential' ? 'active' : ''}`}
+                          onClick={() => update({ choroplethColorScale: 'sequential', choroplethColorRamp: 'blues' })}
+                        >
+                          Sequential
+                        </button>
+                        <button
+                          className={`data-viz-type-btn ${data.choroplethColorScale === 'diverging' ? 'active' : ''}`}
+                          onClick={() => update({ choroplethColorScale: 'diverging', choroplethColorRamp: 'rdylgn' })}
+                        >
+                          Diverging
+                        </button>
+                      </div>
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Colors</span>
+                      <div className="data-ramp-picker">
+                        {Object.keys(data.choroplethColorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS).map(ramp => (
+                          <button
+                            key={ramp}
+                            className={`data-ramp-btn ${data.choroplethColorRamp === ramp ? 'active' : ''}`}
+                            onClick={() => update({ choroplethColorRamp: ramp })}
+                            title={ramp}
+                          >
+                            <span className={`data-ramp-swatch data-ramp-${ramp}`} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Borders</span>
+                      <ColorPickerPopover color={data.choroplethStrokeColor} onChange={c => update({ choroplethStrokeColor: c })} presetColors={DATA_COLORS} />
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Border width</span>
+                      <input type="range" className="style-slider" min={0} max={4} step={0.5}
+                        value={data.choroplethStrokeWidth}
+                        onChange={e => update({ choroplethStrokeWidth: Number(e.target.value) })}
+                      />
+                      <span className="style-value">{data.choroplethStrokeWidth}px</span>
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">No data</span>
+                      <ColorPickerPopover color={data.choroplethMissingColor} onChange={c => update({ choroplethMissingColor: c })} presetColors={['#e0e0e0', '#f5f5f5', '#ffffff', '#d9d9d9']} />
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Labels</span>
+                      <button
+                        className={`data-toggle-btn ${data.choroplethShowLabels ? 'active' : ''}`}
+                        onClick={() => update({ choroplethShowLabels: !data.choroplethShowLabels })}
+                      >
+                        {data.choroplethShowLabels ? 'On' : 'Off'}
+                      </button>
+                    </div>
+                    <div className="style-row">
+                      <span className="style-label">Values</span>
+                      <button
+                        className={`data-toggle-btn ${data.choroplethShowValues ? 'active' : ''}`}
+                        onClick={() => update({ choroplethShowValues: !data.choroplethShowValues })}
+                      >
+                        {data.choroplethShowValues ? 'On' : 'Off'}
+                      </button>
+                    </div>
+                    {data.choroplethShowValues && (
+                      <>
+                        <div className="style-row">
+                          <span className="style-label">Commas</span>
+                          <button
+                            className={`data-toggle-btn ${data.choroplethCommas ? 'active' : ''}`}
+                            onClick={() => update({ choroplethCommas: !data.choroplethCommas })}
+                          >
+                            {data.choroplethCommas ? 'On' : 'Off'}
+                          </button>
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Prefix</span>
+                          <input className="data-unit-input" type="text" placeholder="$, £..."
+                            value={data.choroplethPrefix} onChange={e => update({ choroplethPrefix: e.target.value })} />
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Suffix</span>
+                          <input className="data-unit-input" type="text" placeholder="km², %..."
+                            value={data.choroplethSuffix} onChange={e => update({ choroplethSuffix: e.target.value })} />
+                        </div>
+                      </>
+                    )}
+                    <div className="style-row">
+                      <span className="style-label">Legend</span>
+                      <input type="text" className="data-unit-input" style={{ flex: 1 }}
+                        placeholder={data.valueCol || 'Title'}
+                        value={data.choroplethLegendTitle}
+                        onChange={e => update({ choroplethLegendTitle: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : data.vizType !== 'heatmap' && data.vizType !== 'choropleth' ? (
               <>
                 <div className="style-row">
                   <span className="style-label">Color</span>
@@ -1064,7 +1589,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           </div>
 
           {/* Display options — hidden for heatmap and spikes */}
-          {data.labelCol && data.vizType !== 'heatmap' && data.vizType !== 'spikes' && (
+          {data.labelCol && data.vizType !== 'heatmap' && data.vizType !== 'spikes' && data.vizType !== 'choropleth' && (
             <div className="data-display-section">
               <div className="data-columns-header">Display</div>
               <div className="data-display-row">
@@ -1143,6 +1668,126 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
 
         </div>
       )}
+
+      {/* GeoJSON / Shapefile upload */}
+      <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e8e5de' }}>
+        <div className="data-columns-header">Upload GeoJSON / Shapefile</div>
+        <input
+          ref={geoFileRef}
+          type="file"
+          accept=".geojson,.json,.zip,.shp"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) handleGeoFileUpload(file);
+            e.target.value = '';
+          }}
+        />
+
+        {geoLayers.map(layer => {
+          const isExpanded = expandedGeoLayers.has(layer.id);
+          return (
+            <div key={layer.id} className="geo-layer-card" style={{ marginBottom: 6 }}>
+              <div
+                className="geo-layer-header"
+                onClick={() => setExpandedGeoLayers(prev => {
+                  const next = new Set(prev);
+                  if (next.has(layer.id)) next.delete(layer.id); else next.add(layer.id);
+                  return next;
+                })}
+              >
+                <span className={`geo-layer-arrow ${isExpanded ? 'expanded' : ''}`}>&#9654;</span>
+                <span className="geo-layer-swatch" style={{ background: layer.fillColor }} />
+                <span className="geo-layer-name">{layer.data.name}</span>
+                <span className="geo-layer-meta">
+                  {layer.data.geojson.features.length} {getGeometryType(layer.data.geojson)}
+                </span>
+                <button
+                  className="data-btn geo-layer-remove"
+                  onClick={e => { e.stopPropagation(); removeGeoLayer(layer.id); }}
+                >
+                  ×
+                </button>
+              </div>
+              {isExpanded && (
+                <div className="geo-layer-body">
+                  <div className="style-row">
+                    <span className="style-label">Fill</span>
+                    <ColorPickerPopover color={layer.fillColor} onChange={c => updateGeoLayer(layer.id, { fillColor: c })} presetColors={DATA_COLORS} />
+                  </div>
+                  <div className="style-row">
+                    <span className="style-label">Fill opacity</span>
+                    <input
+                      type="range" className="style-slider" min={0} max={100}
+                      value={Math.round(layer.fillOpacity * 100)}
+                      onChange={e => updateGeoLayer(layer.id, { fillOpacity: Number(e.target.value) / 100 })}
+                    />
+                    <span className="style-value">{Math.round(layer.fillOpacity * 100)}%</span>
+                  </div>
+                  <div className="style-row">
+                    <span className="style-label">Stroke</span>
+                    <ColorPickerPopover color={layer.strokeColor} onChange={c => updateGeoLayer(layer.id, { strokeColor: c })} presetColors={DATA_COLORS} />
+                  </div>
+                  <div className="style-row">
+                    <span className="style-label">Stroke width</span>
+                    <input
+                      type="range" className="style-slider" min={0} max={5} step={0.5}
+                      value={layer.strokeWidth}
+                      onChange={e => updateGeoLayer(layer.id, { strokeWidth: Number(e.target.value) })}
+                    />
+                    <span className="style-value">{layer.strokeWidth}px</span>
+                  </div>
+
+                  {layer.data.columns.length > 0 && (
+                    <>
+                      <div className="style-row">
+                        <span className="style-label">Labels</span>
+                        <button
+                          className={`data-toggle-btn ${layer.showLabels ? 'active' : ''}`}
+                          onClick={() => updateGeoLayer(layer.id, { showLabels: !layer.showLabels })}
+                        >
+                          {layer.showLabels ? 'On' : 'Off'}
+                        </button>
+                      </div>
+                      {layer.showLabels && (
+                        <div className="style-row">
+                          <span className="style-label">Column</span>
+                          <select
+                            className="data-col-select"
+                            value={layer.labelCol || ''}
+                            onChange={e => updateGeoLayer(layer.id, { labelCol: e.target.value || null })}
+                          >
+                            {layer.data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div
+          className="geo-upload-dropzone"
+          onClick={() => geoFileRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+          onDrop={e => {
+            e.preventDefault(); e.stopPropagation();
+            const file = e.dataTransfer.files[0];
+            if (file) handleGeoFileUpload(file);
+          }}
+        >
+          <span style={{ fontSize: 20, marginBottom: 4 }}>+</span>
+          <span style={{ fontSize: 12 }}>{geoLayers.length === 0 ? 'Drop .geojson, .json, or .zip (shapefile)' : 'Add another file'}</span>
+          <span style={{ fontSize: 11, color: '#999' }}>or click to browse</span>
+        </div>
+
+        {geoUploadError && (
+          <p style={{ color: '#e63946', fontSize: 12, margin: '6px 0 0' }}>{geoUploadError}</p>
+        )}
+      </div>
     </div>
   );
 }
