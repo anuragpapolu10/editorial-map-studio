@@ -848,7 +848,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           const val = csvLookup.get(geoKey);
           const matched = val !== undefined;
           if (matched) { min = Math.min(min, val!); max = Math.max(max, val!); }
-          return { ...f, properties: { ...f.properties, _value: val ?? null, _matched: matched } };
+          return { ...f, properties: { ...f.properties, value: val ?? null, _matched: matched } };
         });
         if (min === Infinity) { min = 0; max = 1; }
         sourceData = { type: 'FeatureCollection', features: joinedFeatures };
