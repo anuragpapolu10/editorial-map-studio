@@ -125,6 +125,8 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
   const [geoUploadError, setGeoUploadError] = useState<string | null>(null);
   const [expandedGeoLayers, setExpandedGeoLayers] = useState<Set<string>>(new Set());
   const geoFileRef = useRef<HTMLInputElement>(null);
+  const choroFileRef = useRef<HTMLInputElement>(null);
+  const [choroSource, setChoroSource] = useState<'auto' | 'upload'>('auto');
 
   const update = useCallback((patch: Partial<DataState>) => {
     setData(prev => ({ ...prev, ...patch }));
@@ -183,21 +185,19 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       columns,
       ...detected,
     }));
-    setPasteText(text);
     setGeocodeCol(columns[0] || '');
     setGeocodeContextCol('');
   }, []);
 
-  const handlePaste = () => {
+  useEffect(() => {
     const text = pasteText.trim();
     if (!text) return;
-    loadCSV(text);
-  };
+    const timer = setTimeout(() => loadCSV(text), 300);
+    return () => clearTimeout(timer);
+  }, [pasteText, loadCSV]);
 
   const handleSample = () => {
-    const csv = getSampleCSV();
-    setPasteText(csv);
-    loadCSV(csv);
+    setPasteText(getSampleCSV());
   };
 
   const handleClear = () => {
@@ -932,7 +932,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
 
   const FILL_COLORS = ['#4a90d9', '#2a9d8f', '#e63946', '#e9c46a', '#6a4c93', '#f4a261', '#264653', '#ff6b6b'];
 
-  const handleGeoFileUpload = useCallback(async (file: File) => {
+  const handleGeoFileUpload = useCallback(async (file: File, forChoropleth = false) => {
     setGeoUploadError(null);
     try {
       const result = await parseGeoFile(file);
@@ -941,12 +941,12 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         id: `upload-${++geoLayerCounter}`,
         data: result,
         fillColor: FILL_COLORS[geoLayers.length % FILL_COLORS.length],
-        fillOpacity: 0.3,
+        fillOpacity: forChoropleth ? 0.7 : 0.3,
         strokeColor: '#1a1a1a',
-        strokeWidth: 1.5,
+        strokeWidth: forChoropleth ? 1 : 1.5,
         showLabels: false,
         labelCol: nameCol,
-        colorByData: false,
+        colorByData: forChoropleth,
         geoJoinCol: nameCol,
         csvJoinCol: null,
         csvValueCol: null,
@@ -1024,9 +1024,6 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       />
 
       <div className="data-btn-row">
-        <button className="data-btn data-btn-primary" onClick={handlePaste} disabled={!pasteText.trim()}>
-          Load data
-        </button>
         {!hasData ? (
           <button className="data-btn" onClick={handleSample}>
             Try sample data
@@ -1042,7 +1039,8 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       {hasData && (
         <div className="data-row-count">
           <p style={{ margin: 0 }}>
-            {points.length} point{points.length !== 1 ? 's' : ''} loaded
+            {data.rows.length} row{data.rows.length !== 1 ? 's' : ''} loaded
+            {points.length > 0 && <>, {points.length} with coordinates</>}
             {skippedRows.length > 0 && <>, {skippedRows.length} skipped</>}
           </p>
           {skippedRows.length > 0 && (
@@ -1175,7 +1173,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       {/* Step 3: Viz options — revealed after coordinates are set or data loaded */}
       {hasData && (hasCoords || data.vizType === 'choropleth' || data.valueCol) && (
         <div className="data-viz-options">
-          <div className="data-columns-header">Visualization</div>
+          <div className="data-columns-header">Plot on map</div>
 
           <div className="data-viz-types">
             <button
@@ -1210,6 +1208,11 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
             >
               Heatmap
             </button>
+          </div>
+
+          <div className="data-columns-header" style={{ marginTop: 12 }}>Color regions</div>
+
+          <div className="data-viz-types">
             <button
               className={`data-viz-type-btn ${data.vizType === 'choropleth' ? 'active' : ''}`}
               onClick={() => update({ vizType: 'choropleth', choroplethRegionCol: data.choroplethRegionCol || data.labelCol || data.columns[0] || null })}
@@ -1226,7 +1229,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               <>
                 <div className="style-row">
                   <span className="style-label">Style</span>
-                  <div className="data-viz-types" style={{ gap: 0 }}>
+                  <div className="data-viz-types" style={{ gap: 4 }}>
                     <button
                       className={`data-viz-type-btn ${data.spikeStyle === 'pointed' ? 'active' : ''}`}
                       onClick={() => update({ spikeStyle: 'pointed' })}
@@ -1333,187 +1336,385 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               </>
             ) : data.vizType === 'choropleth' ? (
               <>
-                {/* Boundary setup */}
-                {!choroBoundaries && !choroFetching.active && (
-                  <div className="data-choro-setup">
-                    <div className="style-row">
-                      <span className="style-label">Region</span>
-                      <select
-                        className="data-col-select"
-                        value={data.choroplethRegionCol || data.labelCol || data.columns[0] || ''}
-                        onChange={e => update({ choroplethRegionCol: e.target.value || null })}
-                      >
-                        {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Country</span>
-                      <input
-                        className="data-unit-input"
-                        type="text"
-                        placeholder="US, GB, FR..."
-                        value={data.choroplethCountryCode}
-                        onChange={e => update({ choroplethCountryCode: e.target.value.toUpperCase().slice(0, 2) })}
-                        style={{ width: 60, textTransform: 'uppercase' }}
-                      />
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Type</span>
-                      <div className="data-viz-types" style={{ gap: 0 }}>
-                        {(['states', 'counties', 'cities'] as const).map(t => (
-                          <button
-                            key={t}
-                            className={`data-viz-type-btn ${data.choroplethRegionType === t ? 'active' : ''}`}
-                            onClick={() => update({ choroplethRegionType: t })}
-                          >
-                            {t === 'states' ? 'States' : t === 'counties' ? 'Counties' : 'Cities'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="data-btn-row">
-                      <button
-                        className="data-btn data-btn-primary"
-                        onClick={handleFetchBoundaries}
-                        disabled={!data.choroplethCountryCode}
-                      >
-                        Fetch boundaries
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Fetch progress */}
-                {choroFetching.active && (
-                  <div className="data-geocode-progress">
-                    <p>{choroFetching.msg}</p>
-                  </div>
-                )}
-
-                {/* Match report */}
-                {choroMatchReport && (
-                  <div className="data-match-report">
-                    <p>{choroMatchReport.matched} of {choroMatchReport.total} regions matched</p>
-                    {choroMatchReport.unmatched.length > 0 && (
-                      <div className="data-skipped-list">
-                        {choroMatchReport.unmatched.map((name, i) => (
-                          <div key={i} className="data-skipped-item">
-                            <span className="data-skipped-name">{name}</span>
-                            <span className="data-skipped-reason">not matched</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* Boundary source toggle */}
+                <div className="style-row">
+                  <span className="style-label">Source</span>
+                  <div className="data-viz-types" style={{ gap: 4 }}>
                     <button
-                      className="data-btn"
-                      style={{ marginTop: 6, fontSize: 11 }}
-                      onClick={() => { setChoroBoundaries(null); setChoroMatchReport(null); }}
+                      className={`data-viz-type-btn ${choroSource === 'auto' ? 'active' : ''}`}
+                      onClick={() => setChoroSource('auto')}
                     >
-                      Change boundaries
+                      Auto
+                    </button>
+                    <button
+                      className={`data-viz-type-btn ${choroSource === 'upload' ? 'active' : ''}`}
+                      onClick={() => setChoroSource('upload')}
+                    >
+                      Upload
                     </button>
                   </div>
-                )}
+                </div>
 
-                {/* Choropleth style controls — shown after boundaries are fetched */}
-                {choroBoundaries && (
+                {choroSource === 'auto' ? (
                   <>
-                    <div className="style-row">
-                      <span className="style-label">Scale</span>
-                      <div className="data-viz-types" style={{ gap: 0 }}>
-                        <button
-                          className={`data-viz-type-btn ${data.choroplethColorScale === 'sequential' ? 'active' : ''}`}
-                          onClick={() => update({ choroplethColorScale: 'sequential', choroplethColorRamp: 'blues' })}
-                        >
-                          Sequential
-                        </button>
-                        <button
-                          className={`data-viz-type-btn ${data.choroplethColorScale === 'diverging' ? 'active' : ''}`}
-                          onClick={() => update({ choroplethColorScale: 'diverging', choroplethColorRamp: 'rdylgn' })}
-                        >
-                          Diverging
-                        </button>
-                      </div>
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Colors</span>
-                      <div className="data-ramp-picker">
-                        {Object.keys(data.choroplethColorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS).map(ramp => (
-                          <button
-                            key={ramp}
-                            className={`data-ramp-btn ${data.choroplethColorRamp === ramp ? 'active' : ''}`}
-                            onClick={() => update({ choroplethColorRamp: ramp })}
-                            title={ramp}
+                    {/* Auto boundary setup */}
+                    {!choroBoundaries && !choroFetching.active && (
+                      <div className="data-choro-setup">
+                        <div className="style-row">
+                          <span className="style-label">Region</span>
+                          <select
+                            className="data-col-select"
+                            value={data.choroplethRegionCol || data.labelCol || data.columns[0] || ''}
+                            onChange={e => update({ choroplethRegionCol: e.target.value || null })}
                           >
-                            <span className={`data-ramp-swatch data-ramp-${ramp}`} />
+                            {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Country</span>
+                          <input
+                            className="data-unit-input"
+                            type="text"
+                            placeholder="US, GB, FR..."
+                            value={data.choroplethCountryCode}
+                            onChange={e => update({ choroplethCountryCode: e.target.value.toUpperCase().slice(0, 2) })}
+                            style={{ width: 60, textTransform: 'uppercase' }}
+                          />
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Type</span>
+                          <div className="data-viz-types" style={{ gap: 4 }}>
+                            {(['states', 'counties', 'cities'] as const).map(t => (
+                              <button
+                                key={t}
+                                className={`data-viz-type-btn ${data.choroplethRegionType === t ? 'active' : ''}`}
+                                onClick={() => update({ choroplethRegionType: t })}
+                              >
+                                {t === 'states' ? 'States' : t === 'counties' ? 'Counties' : 'Cities'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="data-btn-row">
+                          <button
+                            className="data-btn data-btn-primary"
+                            onClick={handleFetchBoundaries}
+                            disabled={!data.choroplethCountryCode}
+                          >
+                            Fetch boundaries
                           </button>
-                        ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Borders</span>
-                      <ColorPickerPopover color={data.choroplethStrokeColor} onChange={c => update({ choroplethStrokeColor: c })} presetColors={DATA_COLORS} />
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Border width</span>
-                      <input type="range" className="style-slider" min={0} max={4} step={0.5}
-                        value={data.choroplethStrokeWidth}
-                        onChange={e => update({ choroplethStrokeWidth: Number(e.target.value) })}
-                      />
-                      <span className="style-value">{data.choroplethStrokeWidth}px</span>
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">No data</span>
-                      <ColorPickerPopover color={data.choroplethMissingColor} onChange={c => update({ choroplethMissingColor: c })} presetColors={['#e0e0e0', '#f5f5f5', '#ffffff', '#d9d9d9']} />
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Labels</span>
-                      <button
-                        className={`data-toggle-btn ${data.choroplethShowLabels ? 'active' : ''}`}
-                        onClick={() => update({ choroplethShowLabels: !data.choroplethShowLabels })}
-                      >
-                        {data.choroplethShowLabels ? 'On' : 'Off'}
-                      </button>
-                    </div>
-                    <div className="style-row">
-                      <span className="style-label">Values</span>
-                      <button
-                        className={`data-toggle-btn ${data.choroplethShowValues ? 'active' : ''}`}
-                        onClick={() => update({ choroplethShowValues: !data.choroplethShowValues })}
-                      >
-                        {data.choroplethShowValues ? 'On' : 'Off'}
-                      </button>
-                    </div>
-                    {data.choroplethShowValues && (
+                    )}
+
+                    {/* Fetch progress */}
+                    {choroFetching.active && (
+                      <div className="data-geocode-progress">
+                        <p>{choroFetching.msg}</p>
+                      </div>
+                    )}
+
+                    {/* Match report */}
+                    {choroMatchReport && (
+                      <div className="data-match-report">
+                        <p>{choroMatchReport.matched} of {choroMatchReport.total} regions matched</p>
+                        {choroMatchReport.unmatched.length > 0 && (
+                          <div className="data-skipped-list">
+                            {choroMatchReport.unmatched.map((name, i) => (
+                              <div key={i} className="data-skipped-item">
+                                <span className="data-skipped-name">{name}</span>
+                                <span className="data-skipped-reason">not matched</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          className="data-btn"
+                          style={{ marginTop: 6, fontSize: 11 }}
+                          onClick={() => { setChoroBoundaries(null); setChoroMatchReport(null); }}
+                        >
+                          Change boundaries
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Choropleth style controls — shown after boundaries are fetched */}
+                    {choroBoundaries && (
                       <>
                         <div className="style-row">
-                          <span className="style-label">Commas</span>
+                          <span className="style-label">Scale</span>
+                          <div className="data-viz-types" style={{ gap: 4 }}>
+                            <button
+                              className={`data-viz-type-btn ${data.choroplethColorScale === 'sequential' ? 'active' : ''}`}
+                              onClick={() => update({ choroplethColorScale: 'sequential', choroplethColorRamp: 'blues' })}
+                            >
+                              Sequential
+                            </button>
+                            <button
+                              className={`data-viz-type-btn ${data.choroplethColorScale === 'diverging' ? 'active' : ''}`}
+                              onClick={() => update({ choroplethColorScale: 'diverging', choroplethColorRamp: 'rdylgn' })}
+                            >
+                              Diverging
+                            </button>
+                          </div>
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Colors</span>
+                          <div className="data-ramp-picker">
+                            {Object.keys(data.choroplethColorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS).map(ramp => (
+                              <button
+                                key={ramp}
+                                className={`data-ramp-btn ${data.choroplethColorRamp === ramp ? 'active' : ''}`}
+                                onClick={() => update({ choroplethColorRamp: ramp })}
+                                title={ramp}
+                              >
+                                <span className={`data-ramp-swatch data-ramp-${ramp}`} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Borders</span>
+                          <ColorPickerPopover color={data.choroplethStrokeColor} onChange={c => update({ choroplethStrokeColor: c })} presetColors={DATA_COLORS} />
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Border width</span>
+                          <input type="range" className="style-slider" min={0} max={4} step={0.5}
+                            value={data.choroplethStrokeWidth}
+                            onChange={e => update({ choroplethStrokeWidth: Number(e.target.value) })}
+                          />
+                          <span className="style-value">{data.choroplethStrokeWidth}px</span>
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">No data</span>
+                          <ColorPickerPopover color={data.choroplethMissingColor} onChange={c => update({ choroplethMissingColor: c })} presetColors={['#e0e0e0', '#f5f5f5', '#ffffff', '#d9d9d9']} />
+                        </div>
+                        <div className="style-row">
+                          <span className="style-label">Labels</span>
                           <button
-                            className={`data-toggle-btn ${data.choroplethCommas ? 'active' : ''}`}
-                            onClick={() => update({ choroplethCommas: !data.choroplethCommas })}
+                            className={`data-toggle-btn ${data.choroplethShowLabels ? 'active' : ''}`}
+                            onClick={() => update({ choroplethShowLabels: !data.choroplethShowLabels })}
                           >
-                            {data.choroplethCommas ? 'On' : 'Off'}
+                            {data.choroplethShowLabels ? 'On' : 'Off'}
                           </button>
                         </div>
                         <div className="style-row">
-                          <span className="style-label">Prefix</span>
-                          <input className="data-unit-input" type="text" placeholder="$, £..."
-                            value={data.choroplethPrefix} onChange={e => update({ choroplethPrefix: e.target.value })} />
+                          <span className="style-label">Values</span>
+                          <button
+                            className={`data-toggle-btn ${data.choroplethShowValues ? 'active' : ''}`}
+                            onClick={() => update({ choroplethShowValues: !data.choroplethShowValues })}
+                          >
+                            {data.choroplethShowValues ? 'On' : 'Off'}
+                          </button>
                         </div>
+                        {data.choroplethShowValues && (
+                          <>
+                            <div className="style-row">
+                              <span className="style-label">Commas</span>
+                              <button
+                                className={`data-toggle-btn ${data.choroplethCommas ? 'active' : ''}`}
+                                onClick={() => update({ choroplethCommas: !data.choroplethCommas })}
+                              >
+                                {data.choroplethCommas ? 'On' : 'Off'}
+                              </button>
+                            </div>
+                            <div className="style-row">
+                              <span className="style-label">Prefix</span>
+                              <input className="data-unit-input" type="text" placeholder="$, £..."
+                                value={data.choroplethPrefix} onChange={e => update({ choroplethPrefix: e.target.value })} />
+                            </div>
+                            <div className="style-row">
+                              <span className="style-label">Suffix</span>
+                              <input className="data-unit-input" type="text" placeholder="km², %..."
+                                value={data.choroplethSuffix} onChange={e => update({ choroplethSuffix: e.target.value })} />
+                            </div>
+                          </>
+                        )}
                         <div className="style-row">
-                          <span className="style-label">Suffix</span>
-                          <input className="data-unit-input" type="text" placeholder="km², %..."
-                            value={data.choroplethSuffix} onChange={e => update({ choroplethSuffix: e.target.value })} />
+                          <span className="style-label">Legend</span>
+                          <input type="text" className="data-unit-input" style={{ flex: 1 }}
+                            placeholder={data.valueCol || 'Title'}
+                            value={data.choroplethLegendTitle}
+                            onChange={e => update({ choroplethLegendTitle: e.target.value })}
+                          />
                         </div>
                       </>
                     )}
-                    <div className="style-row">
-                      <span className="style-label">Legend</span>
-                      <input type="text" className="data-unit-input" style={{ flex: 1 }}
-                        placeholder={data.valueCol || 'Title'}
-                        value={data.choroplethLegendTitle}
-                        onChange={e => update({ choroplethLegendTitle: e.target.value })}
-                      />
-                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Upload boundary source */}
+                    <input
+                      ref={choroFileRef}
+                      type="file"
+                      accept=".geojson,.json,.zip,.shp"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleGeoFileUpload(file, true);
+                        e.target.value = '';
+                      }}
+                    />
+
+                    {(() => {
+                      const choroLayer = geoLayers.find(l => l.colorByData);
+                      if (!choroLayer) {
+                        return (
+                          <div
+                            className="geo-upload-dropzone"
+                            style={{ marginTop: 8 }}
+                            onClick={() => choroFileRef.current?.click()}
+                            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                            onDrop={e => {
+                              e.preventDefault(); e.stopPropagation();
+                              const file = e.dataTransfer.files[0];
+                              if (file) handleGeoFileUpload(file, true);
+                            }}
+                          >
+                            <span style={{ fontSize: 20, marginBottom: 4 }}>+</span>
+                            <span style={{ fontSize: 12 }}>Drop .geojson, .json, or .zip (shapefile)</span>
+                            <span style={{ fontSize: 11, color: '#999' }}>or click to browse</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {choroLayer.data.name}
+                            </span>
+                            <span style={{ fontSize: 11, color: '#999' }}>
+                              {choroLayer.data.geojson.features.length} {getGeometryType(choroLayer.data.geojson)}
+                            </span>
+                            <button
+                              className="data-btn geo-layer-remove"
+                              onClick={() => removeGeoLayer(choroLayer.id)}
+                              title="Remove"
+                            >
+                              ×
+                            </button>
+                          </div>
+
+                          <div className="style-row">
+                            <span className="style-label">Match boundaries by</span>
+                            <select
+                              className="data-col-select"
+                              value={choroLayer.geoJoinCol || ''}
+                              onChange={e => updateGeoLayer(choroLayer.id, { geoJoinCol: e.target.value || null })}
+                            >
+                              <option value="">Pick column...</option>
+                              {choroLayer.data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Match data by</span>
+                            <select
+                              className="data-col-select"
+                              value={choroLayer.csvJoinCol || ''}
+                              onChange={e => updateGeoLayer(choroLayer.id, { csvJoinCol: e.target.value || null })}
+                            >
+                              <option value="">Pick column...</option>
+                              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Color by</span>
+                            <select
+                              className="data-col-select"
+                              value={choroLayer.csvValueCol || ''}
+                              onChange={e => updateGeoLayer(choroLayer.id, { csvValueCol: e.target.value || null })}
+                            >
+                              <option value="">Pick column...</option>
+                              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="style-row">
+                            <span className="style-label">Scale</span>
+                            <div className="data-viz-types" style={{ gap: 4 }}>
+                              <button
+                                className={`data-viz-type-btn ${choroLayer.colorScale === 'sequential' ? 'active' : ''}`}
+                                onClick={() => updateGeoLayer(choroLayer.id, { colorScale: 'sequential', colorRamp: 'blues' })}
+                              >
+                                Sequential
+                              </button>
+                              <button
+                                className={`data-viz-type-btn ${choroLayer.colorScale === 'diverging' ? 'active' : ''}`}
+                                onClick={() => updateGeoLayer(choroLayer.id, { colorScale: 'diverging', colorRamp: 'rdylgn' })}
+                              >
+                                Diverging
+                              </button>
+                            </div>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Colors</span>
+                            <div className="data-ramp-picker">
+                              {Object.keys(choroLayer.colorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS).map(ramp => (
+                                <button
+                                  key={ramp}
+                                  className={`data-ramp-btn ${choroLayer.colorRamp === ramp ? 'active' : ''}`}
+                                  onClick={() => updateGeoLayer(choroLayer.id, { colorRamp: ramp })}
+                                  title={ramp}
+                                >
+                                  <span className={`data-ramp-swatch data-ramp-${ramp}`} />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">No data</span>
+                            <ColorPickerPopover color={choroLayer.missingColor} onChange={c => updateGeoLayer(choroLayer.id, { missingColor: c })} presetColors={['#e0e0e0', '#f5f5f5', '#ffffff', '#d9d9d9']} />
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Fill opacity</span>
+                            <input
+                              type="range" className="style-slider" min={0} max={100}
+                              value={Math.round(choroLayer.fillOpacity * 100)}
+                              onChange={e => updateGeoLayer(choroLayer.id, { fillOpacity: Number(e.target.value) / 100 })}
+                            />
+                            <span className="style-value">{Math.round(choroLayer.fillOpacity * 100)}%</span>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Stroke</span>
+                            <ColorPickerPopover color={choroLayer.strokeColor} onChange={c => updateGeoLayer(choroLayer.id, { strokeColor: c })} presetColors={DATA_COLORS} />
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Stroke width</span>
+                            <input
+                              type="range" className="style-slider" min={0} max={5} step={0.5}
+                              value={choroLayer.strokeWidth}
+                              onChange={e => updateGeoLayer(choroLayer.id, { strokeWidth: Number(e.target.value) })}
+                            />
+                            <span className="style-value">{choroLayer.strokeWidth}px</span>
+                          </div>
+
+                          {choroLayer.data.columns.length > 0 && (
+                            <div className="style-row">
+                              <span className="style-label">Labels</span>
+                              <button
+                                className={`data-toggle-btn ${choroLayer.showLabels ? 'active' : ''}`}
+                                onClick={() => updateGeoLayer(choroLayer.id, { showLabels: !choroLayer.showLabels })}
+                              >
+                                {choroLayer.showLabels ? 'On' : 'Off'}
+                              </button>
+                            </div>
+                          )}
+                          {choroLayer.showLabels && (
+                            <div className="style-row">
+                              <span className="style-label">Column</span>
+                              <select
+                                className="data-col-select"
+                                value={choroLayer.labelCol || ''}
+                                onChange={e => updateGeoLayer(choroLayer.id, { labelCol: e.target.value || null })}
+                              >
+                                {choroLayer.data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </>
@@ -1712,7 +1913,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
 
       {/* GeoJSON / Shapefile upload */}
       <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e8e5de' }}>
-        <div className="data-columns-header">Upload GeoJSON / Shapefile</div>
+        <div className="data-columns-header">Overlay</div>
         <input
           ref={geoFileRef}
           type="file"
@@ -1725,7 +1926,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           }}
         />
 
-        {geoLayers.map(layer => {
+        {geoLayers.filter(l => !l.colorByData).map(layer => {
           const isExpanded = expandedGeoLayers.has(layer.id);
           return (
             <div key={layer.id} className="geo-layer-card" style={{ marginBottom: 6 }}>
@@ -1807,93 +2008,6 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                     </>
                   )}
 
-                  {/* Color by CSV data */}
-                  {hasData && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e8e5de' }}>
-                      <div className="style-row">
-                        <span className="style-label">Color by data</span>
-                        <button
-                          className={`data-toggle-btn ${layer.colorByData ? 'active' : ''}`}
-                          onClick={() => updateGeoLayer(layer.id, { colorByData: !layer.colorByData })}
-                        >
-                          {layer.colorByData ? 'On' : 'Off'}
-                        </button>
-                      </div>
-                      {layer.colorByData && (
-                        <>
-                          <div className="style-row">
-                            <span className="style-label">GeoJSON key</span>
-                            <select
-                              className="data-col-select"
-                              value={layer.geoJoinCol || ''}
-                              onChange={e => updateGeoLayer(layer.id, { geoJoinCol: e.target.value || null })}
-                            >
-                              <option value="">Pick column...</option>
-                              {layer.data.columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="style-row">
-                            <span className="style-label">CSV key</span>
-                            <select
-                              className="data-col-select"
-                              value={layer.csvJoinCol || ''}
-                              onChange={e => updateGeoLayer(layer.id, { csvJoinCol: e.target.value || null })}
-                            >
-                              <option value="">Pick column...</option>
-                              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="style-row">
-                            <span className="style-label">Value</span>
-                            <select
-                              className="data-col-select"
-                              value={layer.csvValueCol || ''}
-                              onChange={e => updateGeoLayer(layer.id, { csvValueCol: e.target.value || null })}
-                            >
-                              <option value="">Pick column...</option>
-                              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="style-row">
-                            <span className="style-label">Scale</span>
-                            <div className="data-viz-types" style={{ gap: 0 }}>
-                              <button
-                                className={`data-viz-type-btn ${layer.colorScale === 'sequential' ? 'active' : ''}`}
-                                onClick={() => updateGeoLayer(layer.id, { colorScale: 'sequential', colorRamp: 'blues' })}
-                              >
-                                Sequential
-                              </button>
-                              <button
-                                className={`data-viz-type-btn ${layer.colorScale === 'diverging' ? 'active' : ''}`}
-                                onClick={() => updateGeoLayer(layer.id, { colorScale: 'diverging', colorRamp: 'rdylgn' })}
-                              >
-                                Diverging
-                              </button>
-                            </div>
-                          </div>
-                          <div className="style-row">
-                            <span className="style-label">Colors</span>
-                            <div className="data-ramp-picker">
-                              {Object.keys(layer.colorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS).map(ramp => (
-                                <button
-                                  key={ramp}
-                                  className={`data-ramp-btn ${layer.colorRamp === ramp ? 'active' : ''}`}
-                                  onClick={() => updateGeoLayer(layer.id, { colorRamp: ramp })}
-                                  title={ramp}
-                                >
-                                  <span className={`data-ramp-swatch data-ramp-${ramp}`} />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="style-row">
-                            <span className="style-label">No data</span>
-                            <ColorPickerPopover color={layer.missingColor} onChange={c => updateGeoLayer(layer.id, { missingColor: c })} presetColors={['#e0e0e0', '#f5f5f5', '#ffffff', '#d9d9d9']} />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
