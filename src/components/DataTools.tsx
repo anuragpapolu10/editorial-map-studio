@@ -41,6 +41,13 @@ interface GeoLayer {
   strokeWidth: number;
   showLabels: boolean;
   labelCol: string | null;
+  colorByData: boolean;
+  geoJoinCol: string | null;
+  csvJoinCol: string | null;
+  csvValueCol: string | null;
+  colorScale: 'sequential' | 'diverging';
+  colorRamp: string;
+  missingColor: string;
 }
 
 let geoLayerCounter = 0;
@@ -824,11 +831,38 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
       const labelId = `geo-${layer.id}-label`;
       const geoType = getGeometryType(layer.data.geojson);
 
+      let sourceData: GeoJSON.FeatureCollection = layer.data.geojson;
+      let fillColorExpr: any = layer.fillColor;
+
+      if (layer.colorByData && layer.geoJoinCol && layer.csvJoinCol && layer.csvValueCol && data.rows.length > 0) {
+        const csvLookup = new Map<string, number>();
+        for (const row of data.rows) {
+          const key = (row[layer.csvJoinCol!] ?? '').toString().trim().toLowerCase();
+          const val = parseFloat(row[layer.csvValueCol!] ?? '');
+          if (key && !isNaN(val)) csvLookup.set(key, val);
+        }
+
+        let min = Infinity, max = -Infinity;
+        const joinedFeatures = layer.data.geojson.features.map(f => {
+          const geoKey = (f.properties?.[layer.geoJoinCol!] ?? '').toString().trim().toLowerCase();
+          const val = csvLookup.get(geoKey);
+          const matched = val !== undefined;
+          if (matched) { min = Math.min(min, val!); max = Math.max(max, val!); }
+          return { ...f, properties: { ...f.properties, _value: val ?? null, _matched: matched } };
+        });
+        if (min === Infinity) { min = 0; max = 1; }
+        sourceData = { type: 'FeatureCollection', features: joinedFeatures };
+
+        const ramps = layer.colorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS;
+        const ramp = ramps[layer.colorRamp] || Object.values(ramps)[0];
+        fillColorExpr = buildFillColorExpression(ramp, min, max, layer.missingColor);
+      }
+
       if (!map.getSource(src)) {
-        map.addSource(src, { type: 'geojson', data: layer.data.geojson });
+        map.addSource(src, { type: 'geojson', data: sourceData });
         geoLayerIdsRef.current.add(layer.id);
       } else {
-        (map.getSource(src) as maplibregl.GeoJSONSource).setData(layer.data.geojson);
+        (map.getSource(src) as maplibregl.GeoJSONSource).setData(sourceData);
       }
 
       if (geoType === 'polygon' || geoType === 'mixed') {
@@ -836,10 +870,10 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           map.addLayer({
             id: fillId, type: 'fill', source: src,
             filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
-            paint: { 'fill-color': layer.fillColor, 'fill-opacity': layer.fillOpacity },
+            paint: { 'fill-color': fillColorExpr, 'fill-opacity': layer.fillOpacity },
           }, beforeId);
         } else {
-          map.setPaintProperty(fillId, 'fill-color', layer.fillColor);
+          map.setPaintProperty(fillId, 'fill-color', fillColorExpr);
           map.setPaintProperty(fillId, 'fill-opacity', layer.fillOpacity);
         }
       }
@@ -894,7 +928,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         if (map.getLayer(labelId)) map.setLayoutProperty(labelId, 'visibility', 'none');
       }
     }
-  }, [map, geoLayers, removeGeoMapLayers]);
+  }, [map, geoLayers, removeGeoMapLayers, data.rows]);
 
   const FILL_COLORS = ['#4a90d9', '#2a9d8f', '#e63946', '#e9c46a', '#6a4c93', '#f4a261', '#264653', '#ff6b6b'];
 
@@ -912,6 +946,13 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         strokeWidth: 1.5,
         showLabels: false,
         labelCol: nameCol,
+        colorByData: false,
+        geoJoinCol: nameCol,
+        csvJoinCol: null,
+        csvValueCol: null,
+        colorScale: 'sequential',
+        colorRamp: 'blues',
+        missingColor: '#e0e0e0',
       };
       setGeoLayers(prev => [...prev, newLayer]);
       setExpandedGeoLayers(prev => new Set(prev).add(newLayer.id));
@@ -1711,10 +1752,12 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
               </div>
               {isExpanded && (
                 <div className="geo-layer-body">
-                  <div className="style-row">
-                    <span className="style-label">Fill</span>
-                    <ColorPickerPopover color={layer.fillColor} onChange={c => updateGeoLayer(layer.id, { fillColor: c })} presetColors={DATA_COLORS} />
-                  </div>
+                  {!layer.colorByData && (
+                    <div className="style-row">
+                      <span className="style-label">Fill</span>
+                      <ColorPickerPopover color={layer.fillColor} onChange={c => updateGeoLayer(layer.id, { fillColor: c })} presetColors={DATA_COLORS} />
+                    </div>
+                  )}
                   <div className="style-row">
                     <span className="style-label">Fill opacity</span>
                     <input
@@ -1762,6 +1805,94 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                         </div>
                       )}
                     </>
+                  )}
+
+                  {/* Color by CSV data */}
+                  {hasData && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e8e5de' }}>
+                      <div className="style-row">
+                        <span className="style-label">Color by data</span>
+                        <button
+                          className={`data-toggle-btn ${layer.colorByData ? 'active' : ''}`}
+                          onClick={() => updateGeoLayer(layer.id, { colorByData: !layer.colorByData })}
+                        >
+                          {layer.colorByData ? 'On' : 'Off'}
+                        </button>
+                      </div>
+                      {layer.colorByData && (
+                        <>
+                          <div className="style-row">
+                            <span className="style-label">GeoJSON key</span>
+                            <select
+                              className="data-col-select"
+                              value={layer.geoJoinCol || ''}
+                              onChange={e => updateGeoLayer(layer.id, { geoJoinCol: e.target.value || null })}
+                            >
+                              <option value="">Pick column...</option>
+                              {layer.data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">CSV key</span>
+                            <select
+                              className="data-col-select"
+                              value={layer.csvJoinCol || ''}
+                              onChange={e => updateGeoLayer(layer.id, { csvJoinCol: e.target.value || null })}
+                            >
+                              <option value="">Pick column...</option>
+                              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Value</span>
+                            <select
+                              className="data-col-select"
+                              value={layer.csvValueCol || ''}
+                              onChange={e => updateGeoLayer(layer.id, { csvValueCol: e.target.value || null })}
+                            >
+                              <option value="">Pick column...</option>
+                              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Scale</span>
+                            <div className="data-viz-types" style={{ gap: 0 }}>
+                              <button
+                                className={`data-viz-type-btn ${layer.colorScale === 'sequential' ? 'active' : ''}`}
+                                onClick={() => updateGeoLayer(layer.id, { colorScale: 'sequential', colorRamp: 'blues' })}
+                              >
+                                Sequential
+                              </button>
+                              <button
+                                className={`data-viz-type-btn ${layer.colorScale === 'diverging' ? 'active' : ''}`}
+                                onClick={() => updateGeoLayer(layer.id, { colorScale: 'diverging', colorRamp: 'rdylgn' })}
+                              >
+                                Diverging
+                              </button>
+                            </div>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">Colors</span>
+                            <div className="data-ramp-picker">
+                              {Object.keys(layer.colorScale === 'sequential' ? SEQUENTIAL_RAMPS : DIVERGING_RAMPS).map(ramp => (
+                                <button
+                                  key={ramp}
+                                  className={`data-ramp-btn ${layer.colorRamp === ramp ? 'active' : ''}`}
+                                  onClick={() => updateGeoLayer(layer.id, { colorRamp: ramp })}
+                                  title={ramp}
+                                >
+                                  <span className={`data-ramp-swatch data-ramp-${ramp}`} />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="style-row">
+                            <span className="style-label">No data</span>
+                            <ColorPickerPopover color={layer.missingColor} onChange={c => updateGeoLayer(layer.id, { missingColor: c })} presetColors={['#e0e0e0', '#f5f5f5', '#ffffff', '#d9d9d9']} />
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
