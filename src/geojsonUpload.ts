@@ -42,7 +42,7 @@ function parseGpx(text: string): GeoJSON.FeatureCollection {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   const features: GeoJSON.Feature[] = [];
 
-  function getCoord(el: Element): [number, number, number?] {
+  function getCoord(el: Element): number[] {
     const lon = parseFloat(el.getAttribute('lon')!);
     const lat = parseFloat(el.getAttribute('lat')!);
     const eleEl = el.querySelector('ele');
