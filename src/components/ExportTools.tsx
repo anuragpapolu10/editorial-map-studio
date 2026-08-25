@@ -102,11 +102,23 @@ function drawAttribution(ctx: CanvasRenderingContext2D, canvasW: number, canvasH
 }
 
 /** Sources that contain user-drawn features (not basemap) */
-const FEATURE_SOURCES = new Set([
+const DRAWING_SOURCES = new Set([
   'shapes', 'shapes-preview',
   'arrows', 'arrows-preview',
   'markers', 'annotations',
 ]);
+
+function isFeatureSource(src: string): boolean {
+  return DRAWING_SOURCES.has(src) || src.startsWith('data-') || src.startsWith('geo-');
+}
+
+/** Categorize a map source into an export layer group */
+function getSourceCategory(src: string): 'drawing' | 'data' | 'geo' | null {
+  if (DRAWING_SOURCES.has(src)) return 'drawing';
+  if (src.startsWith('data-')) return 'data';
+  if (src.startsWith('geo-')) return 'geo';
+  return null;
+}
 
 /**
  * Load an image from a data URL into an HTMLImageElement.
@@ -1059,7 +1071,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
     for (const layer of style.layers || []) {
       const src = (layer as any).source as string | undefined;
-      if (src && FEATURE_SOURCES.has(src)) {
+      if (src && isFeatureSource(src)) {
         const vis = map.getLayoutProperty(layer.id, 'visibility');
         if (vis !== 'none') {
           map.setLayoutProperty(layer.id, 'visibility', 'none');
@@ -1092,32 +1104,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
     }
     await captureCanvas('image/png'); // wait for render (discard result)
 
-    // 2. Hide basemap layers, capture features only on transparent background
-    const hiddenLayers: string[] = [];
-
-    // Hide all non-feature layers
-    for (const layer of style.layers || []) {
-      const src = (layer as any).source as string | undefined;
-      if (!src || !FEATURE_SOURCES.has(src)) {
-        const vis = map.getLayoutProperty(layer.id, 'visibility');
-        if (vis !== 'none') {
-          map.setLayoutProperty(layer.id, 'visibility', 'none');
-          hiddenLayers.push(layer.id);
-        }
-      }
-    }
-
-    // Also hide selection/preview layers for a clean export
-    for (const layerId of ['shapes-selection', 'arrows-selection', 'arrows-cp-lines', 'arrows-cp-handles']) {
-      try {
-        const vis = map.getLayoutProperty(layerId, 'visibility');
-        if (vis !== 'none') {
-          map.setLayoutProperty(layerId, 'visibility', 'none');
-          hiddenLayers.push(layerId);
-        }
-      } catch { /* layer might not exist */ }
-    }
-
+    // 2. Export each feature category as its own transparent PNG
     // Set background to transparent
     const oldBg = map.getPaintProperty('background', 'background-color');
     const oldBgOpacity = map.getPaintProperty('background', 'background-opacity');
@@ -1125,10 +1112,74 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       map.setPaintProperty('background', 'background-opacity', 0);
     } catch { /* no background layer */ }
 
-    // Capture features only (no overlay on features layer)
-    let featuresDataUrl = await captureCanvas('image/png');
-    featuresDataUrl = await cropToAspectRatio(featuresDataUrl, fullW, fullH, aspectRatio, 'image/png');
-    await downloadDataUrl(featuresDataUrl, 'map-features.png');
+    // Categorize all visible feature layers
+    const selectionLayers = new Set(['shapes-selection', 'arrows-selection', 'arrows-cp-lines', 'arrows-cp-handles']);
+    const categoryLayers: Record<string, string[]> = { drawing: [], data: [], geo: [] };
+    const allFeatureLayers: string[] = [];
+    const basemapLayers: string[] = [];
+
+    for (const layer of style.layers || []) {
+      const src = (layer as any).source as string | undefined;
+      const vis = map.getLayoutProperty(layer.id, 'visibility');
+      if (vis === 'none') continue;
+      if (selectionLayers.has(layer.id)) continue;
+
+      if (src && isFeatureSource(src)) {
+        const cat = getSourceCategory(src);
+        if (cat) categoryLayers[cat].push(layer.id);
+        allFeatureLayers.push(layer.id);
+      } else {
+        basemapLayers.push(layer.id);
+      }
+    }
+
+    // Hide all basemap layers
+    for (const layerId of basemapLayers) {
+      map.setLayoutProperty(layerId, 'visibility', 'none');
+    }
+    // Hide selection/preview layers
+    const hiddenSelectionLayers: string[] = [];
+    for (const layerId of selectionLayers) {
+      try {
+        const vis = map.getLayoutProperty(layerId, 'visibility');
+        if (vis !== 'none') {
+          map.setLayoutProperty(layerId, 'visibility', 'none');
+          hiddenSelectionLayers.push(layerId);
+        }
+      } catch { /* layer might not exist */ }
+    }
+
+    // Export each category that has visible layers
+    const categories: { key: string; name: string }[] = [
+      { key: 'drawing', name: 'map-drawings.png' },
+      { key: 'data', name: 'map-data.png' },
+      { key: 'geo', name: 'map-boundaries.png' },
+    ];
+
+    for (const { key, name } of categories) {
+      if (categoryLayers[key].length === 0) continue;
+
+      // Hide all feature layers except this category
+      const toHide: string[] = [];
+      for (const layerId of allFeatureLayers) {
+        if (!categoryLayers[key].includes(layerId)) {
+          map.setLayoutProperty(layerId, 'visibility', 'none');
+          toHide.push(layerId);
+        }
+      }
+
+      let dataUrl = await captureCanvas('image/png');
+      dataUrl = await cropToAspectRatio(dataUrl, fullW, fullH, aspectRatio, 'image/png');
+      await downloadDataUrl(dataUrl, name);
+
+      // Restore hidden feature layers
+      for (const layerId of toHide) {
+        map.setLayoutProperty(layerId, 'visibility', 'visible');
+      }
+    }
+
+    // Gather all layers we need to restore
+    const hiddenLayers = [...basemapLayers, ...hiddenSelectionLayers];
 
     // 3. Export overlay layers as standalone transparent PNGs
     // Use cropped dimensions for overlay layers
@@ -1208,7 +1259,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
 
     for (const layer of style.layers || []) {
       const src = (layer as any).source as string | undefined;
-      if (src && FEATURE_SOURCES.has(src)) {
+      if (src && isFeatureSource(src)) {
         const vis = map.getLayoutProperty(layer.id, 'visibility');
         if (vis !== 'none') {
           map.setLayoutProperty(layer.id, 'visibility', 'none');
@@ -1622,7 +1673,7 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
           Export JPG
         </button>
         <button className="action-btn" onClick={exportPng} disabled={!map}>
-          Export PNG ({2 + (overlay.title || overlay.subtitle ? 1 : 0) + (overlay.showScaleBar ? 1 : 0) + (legendEntries.length > 0 ? 1 : 0) + (overlay.showMinimap ? 1 : 0)} files)
+          Export PNG (layers)
         </button>
       </div>
       <p style={{ margin: '8px 0 0', fontSize: 11, color: '#888', lineHeight: 1.4 }}>
