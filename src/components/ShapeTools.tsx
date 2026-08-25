@@ -6,7 +6,7 @@ import {
   getCentroid, rotateVertices, translateVertices,
   makeRectVertices, makeEllipseVertices,
   resizeRectCorner, resizeEllipseCardinal,
-  simplifyPath, bufferPath,
+  simplifyPath,
 } from '../shapes';
 import { sampleSpline } from '../arrows';
 import { SHAPE_LAYER_IDS, SHAPE_HANDLE_LAYER_ID } from './MapView';
@@ -1354,7 +1354,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           {selectedShape ? (
             <div className="selection-bar">
               <span className="selection-text">
-                {{ pen: 'Curves', brush: 'Free Hand' }[selectedShape.type] || selectedShape.type.charAt(0).toUpperCase() + selectedShape.type.slice(1)}
+                {({ pen: 'Curves', brush: 'Free Hand' } as Record<string, string>)[selectedShape.type] || selectedShape.type.charAt(0).toUpperCase() + selectedShape.type.slice(1)}
               </span>
               <div className="selection-actions">
                 <button

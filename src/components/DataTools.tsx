@@ -1190,7 +1190,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                     <input
                       ref={choroFileRef}
                       type="file"
-                      accept=".geojson,.json,.zip,.shp"
+                      accept=".geojson,.json,.zip,.shp,.gpx,.kml"
                       style={{ display: 'none' }}
                       onChange={e => {
                         const file = e.target.files?.[0];
@@ -1215,7 +1215,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
                             }}
                           >
                             <span style={{ fontSize: 20, marginBottom: 4 }}>+</span>
-                            <span style={{ fontSize: 12 }}>Drop .geojson, .json, or .zip (shapefile)</span>
+                            <span style={{ fontSize: 12 }}>Drop .geojson, .gpx, .kml, or .zip (shapefile)</span>
                             <span style={{ fontSize: 11, color: '#999' }}>or click to browse</span>
                           </div>
                         );
@@ -1558,7 +1558,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         <input
           ref={geoFileRef}
           type="file"
-          accept=".geojson,.json,.zip,.shp"
+          accept=".geojson,.json,.zip,.shp,.gpx,.kml"
           style={{ display: 'none' }}
           onChange={e => {
             const file = e.target.files?.[0];
@@ -1666,7 +1666,7 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
           }}
         >
           <span style={{ fontSize: 20, marginBottom: 4 }}>+</span>
-          <span style={{ fontSize: 12 }}>{geoLayers.length === 0 ? 'Drop .geojson, .json, or .zip (shapefile)' : 'Add another file'}</span>
+          <span style={{ fontSize: 12 }}>{geoLayers.length === 0 ? 'Drop .geojson, .gpx, .kml, or .zip (shapefile)' : 'Add another file'}</span>
           <span style={{ fontSize: 11, color: '#999' }}>or click to browse</span>
         </div>
 
