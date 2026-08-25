@@ -388,10 +388,26 @@ html, body, #root {
 }
 
 /* Drawing Tools */
+.tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.tools-grid > .drawing-tools {
+  display: contents;
+}
+
 .drawing-tools {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.tools-grid .text-style-controls,
+.tools-grid .marker-style-controls,
+.tools-grid .arrow-style-controls {
+  grid-column: 1 / -1;
 }
 
 .tool-btn {

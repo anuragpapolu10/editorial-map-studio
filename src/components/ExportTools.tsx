@@ -566,6 +566,32 @@ function buildSvgExport(
   svgParts.push(`    <image xlink:href="${bgDataUrl}" href="${bgDataUrl}" width="${w}" height="${h}" />`);
   svgParts.push('  </g>');
 
+  // --- Pattern defs for hatching ---
+  // Generate per-color hatch pattern defs
+  const patternDefs = new Set<string>();
+  const allShapes = shapeStore.getAll();
+  svgParts.push('  <defs>');
+  for (const s of allShapes) {
+    if (!s.fillPattern || s.fillPattern === 'solid') continue;
+    const scale = s.hatchScale ?? 1;
+    const key = `${s.fillPattern}-${s.fill.replace('#', '')}-${scale.toFixed(1)}`;
+    if (patternDefs.has(key)) continue;
+    patternDefs.add(key);
+    const color = s.fill;
+    const sz = Math.max(2, Math.round(6 * scale));
+    if (s.fillPattern === 'hatch') {
+      svgParts.push(`    <pattern id="${key}" patternUnits="userSpaceOnUse" width="${sz}" height="${sz}" patternTransform="rotate(45)">`);
+      svgParts.push(`      <line x1="0" y1="0" x2="0" y2="${sz}" stroke="${color}" stroke-width="1"/>`);
+      svgParts.push('    </pattern>');
+    } else {
+      svgParts.push(`    <pattern id="${key}" patternUnits="userSpaceOnUse" width="${sz}" height="${sz}">`);
+      svgParts.push(`      <line x1="0" y1="0" x2="${sz}" y2="${sz}" stroke="${color}" stroke-width="1"/>`);
+      svgParts.push(`      <line x1="${sz}" y1="0" x2="0" y2="${sz}" stroke="${color}" stroke-width="1"/>`);
+      svgParts.push('    </pattern>');
+    }
+  }
+  svgParts.push('  </defs>');
+
   // --- Features group ---
   svgParts.push('  <g id="features">');
 
@@ -576,20 +602,24 @@ function buildSvgExport(
       : shape.strokeStyle === 'dotted' ? ' stroke-dasharray="2,3"' : '';
     const sw = shape.strokeWidth * dpr;
 
+    const patternId = (shape.fillPattern === 'hatch' || shape.fillPattern === 'crosshatch')
+      ? `${shape.fillPattern}-${shape.fill.replace('#', '')}-${(shape.hatchScale ?? 1).toFixed(1)}` : null;
+    const fillAttr = patternId
+      ? `fill="url(#${patternId})" fill-opacity="${shape.fillOpacity}"`
+      : `fill="${shape.fill}" fill-opacity="${shape.fillOpacity}"`;
+
     if (shape.type === 'rectangle' || shape.type === 'polygon') {
       const pts = shape.vertices.map((v) => px(v));
       const pointsStr = pts.map((p) => `${p[0]},${p[1]}`).join(' ');
-      svgParts.push(`    <polygon points="${pointsStr}" fill="${shape.fill}" fill-opacity="${shape.fillOpacity}" stroke="${shape.stroke}" stroke-width="${sw}"${dashArray} />`);
+      svgParts.push(`    <polygon points="${pointsStr}" ${fillAttr} stroke="${shape.stroke}" stroke-width="${sw}"${dashArray} />`);
     } else if (shape.type === 'ellipse') {
       const pts = shape.vertices.map((v) => px(v));
-      // Center
       const ecx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
       const ecy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
-      // Semi-axes from edge midpoints
       const dx = Math.sqrt((pts[1][0] - pts[0][0]) ** 2 + (pts[1][1] - pts[0][1]) ** 2) / 2;
       const dy = Math.sqrt((pts[2][0] - pts[1][0]) ** 2 + (pts[2][1] - pts[1][1]) ** 2) / 2;
       const angle = Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]) * 180 / Math.PI;
-      svgParts.push(`    <ellipse cx="${ecx}" cy="${ecy}" rx="${dx}" ry="${dy}" transform="rotate(${angle},${ecx},${ecy})" fill="${shape.fill}" fill-opacity="${shape.fillOpacity}" stroke="${shape.stroke}" stroke-width="${sw}"${dashArray} />`);
+      svgParts.push(`    <ellipse cx="${ecx}" cy="${ecy}" rx="${dx}" ry="${dy}" transform="rotate(${angle},${ecx},${ecy})" ${fillAttr} stroke="${shape.stroke}" stroke-width="${sw}"${dashArray} />`);
     } else if (shape.type === 'line') {
       const pts = shape.vertices.map((v) => px(v));
       if (pts.length >= 2) {

@@ -110,6 +110,8 @@ export const MARKER_LAYER_ID = 'markers-symbol';
 
 export const SHAPE_LAYER_IDS = [
   'shapes-fill',
+  'shapes-fill-hatch',
+  'shapes-fill-crosshatch',
   'shapes-stroke-solid',
   'shapes-stroke-dashed',
   'shapes-stroke-dotted',
@@ -480,14 +482,47 @@ export function MapView({ onMapReady, overlay, legendEntries = [], heatmapLegend
           data: { type: 'FeatureCollection', features: [] },
         });
 
-        // Fill for closed shapes (rectangle, ellipse, polygon)
+        // Fill for closed shapes — solid (default)
         map.addLayer({
           id: 'shapes-fill',
           type: 'fill',
           source: 'shapes',
-          filter: ['!=', ['get', 'shapeType'], 'line'],
+          filter: ['all',
+            ['!=', ['get', 'shapeType'], 'line'],
+            ['any', ['!', ['has', 'fillPattern']], ['==', ['get', 'fillPattern'], 'solid']],
+          ],
           paint: {
             'fill-color': ['get', 'fill'],
+            'fill-opacity': ['get', 'fillOpacity'],
+          },
+        });
+
+        // Fill for hatched shapes (pattern images are registered dynamically per color)
+        map.addLayer({
+          id: 'shapes-fill-hatch',
+          type: 'fill',
+          source: 'shapes',
+          filter: ['all',
+            ['!=', ['get', 'shapeType'], 'line'],
+            ['==', ['get', 'fillPattern'], 'hatch'],
+          ],
+          paint: {
+            'fill-pattern': ['concat', 'hatch-', ['get', 'fill'], '-', ['get', 'hatchScale']],
+            'fill-opacity': ['get', 'fillOpacity'],
+          },
+        });
+
+        // Fill for cross-hatched shapes
+        map.addLayer({
+          id: 'shapes-fill-crosshatch',
+          type: 'fill',
+          source: 'shapes',
+          filter: ['all',
+            ['!=', ['get', 'shapeType'], 'line'],
+            ['==', ['get', 'fillPattern'], 'crosshatch'],
+          ],
+          paint: {
+            'fill-pattern': ['concat', 'crosshatch-', ['get', 'fill'], '-', ['get', 'hatchScale']],
             'fill-opacity': ['get', 'fillOpacity'],
           },
         });

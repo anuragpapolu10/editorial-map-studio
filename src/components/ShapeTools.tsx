@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { ShapeStore } from '../shapes';
-import type { ShapeAnnotation, StrokeStyle } from '../shapes';
+import type { ShapeAnnotation, StrokeStyle, FillPattern } from '../shapes';
 import {
   getCentroid, rotateVertices, translateVertices,
   makeRectVertices, makeEllipseVertices,
   resizeRectCorner, resizeEllipseCardinal,
+  simplifyPath, bufferPath,
 } from '../shapes';
+import { sampleSpline } from '../arrows';
 import { SHAPE_LAYER_IDS, SHAPE_HANDLE_LAYER_ID } from './MapView';
 import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
@@ -37,6 +39,16 @@ const SHAPE_TOOLS: { id: ActiveTool; label: string; icon: string }[] = [
     label: 'Line / Polygon',
     icon: '<polyline points="3,15 8,5 14,12 17,4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
   },
+  {
+    id: 'pen',
+    label: 'Curves',
+    icon: '<path d="M4,16 Q7,4 10,10 Q13,16 17,5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  },
+  {
+    id: 'brush',
+    label: 'Free Hand',
+    icon: '<path d="M5,15 C6,10 8,8 10,6 L12,4 L14,6 C12,8 10,10 9,15 Z" fill="currentColor" opacity="0.4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
+  },
 ];
 
 const COLORS = [
@@ -57,8 +69,53 @@ const TOOLTIP_MESSAGES: Record<string, string> = {
   ellipse: 'Click and drag to draw an ellipse · Shift for circle',
   line: 'Click to place points · Shift to snap 45° · Right-click to finish · Click first point to close',
   'line-drawing': 'Click to add points · Shift to snap 45° · Delete to undo last point · Right-click to finish',
+  pen: 'Click to place points · Double-click or right-click to finish · Path will be smoothed',
+  'pen-drawing': 'Click to add points · Double-click or right-click to finish · Delete to undo last point',
+  brush: 'Click and drag to paint · Release to finish',
   selected: 'Drag to move · Drag handles to resize · Click Done to deselect · Alt+drag to duplicate · Ctrl+C / Ctrl+V to copy/paste · Delete to remove',
 };
+
+function ensurePatternImages(map: maplibregl.Map, shapes: ShapeAnnotation[]) {
+  const dpr = window.devicePixelRatio || 1;
+
+  for (const s of shapes) {
+    if (!s.fillPattern || s.fillPattern === 'solid') continue;
+    const scale = s.hatchScale ?? 1;
+    const key = `${s.fillPattern}-${s.fill}-${scale.toFixed(1)}`;
+    if (map.hasImage(key)) continue;
+    const IMG_SIZE = Math.max(4, Math.round(10 * scale * dpr));
+    const canvas = document.createElement('canvas');
+    canvas.width = IMG_SIZE;
+    canvas.height = IMG_SIZE;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, IMG_SIZE, IMG_SIZE);
+    ctx.strokeStyle = s.fill;
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'square';
+    ctx.beginPath();
+    ctx.moveTo(-1, IMG_SIZE + 1); ctx.lineTo(IMG_SIZE + 1, -1);
+    ctx.moveTo(-1 - IMG_SIZE, IMG_SIZE + 1); ctx.lineTo(IMG_SIZE + 1 - IMG_SIZE, -1);
+    ctx.moveTo(-1 + IMG_SIZE, IMG_SIZE + 1); ctx.lineTo(IMG_SIZE + 1 + IMG_SIZE, -1);
+    ctx.stroke();
+    if (s.fillPattern === 'crosshatch') {
+      ctx.beginPath();
+      ctx.moveTo(-1, -1); ctx.lineTo(IMG_SIZE + 1, IMG_SIZE + 1);
+      ctx.moveTo(-1 + IMG_SIZE, -1); ctx.lineTo(IMG_SIZE + 1 + IMG_SIZE, IMG_SIZE + 1);
+      ctx.moveTo(-1 - IMG_SIZE, -1); ctx.lineTo(IMG_SIZE + 1 - IMG_SIZE, IMG_SIZE + 1);
+      ctx.stroke();
+    }
+    map.addImage(key, ctx.getImageData(0, 0, IMG_SIZE, IMG_SIZE), { pixelRatio: dpr });
+  }
+}
+
+function isClosedShape(s: ShapeAnnotation): boolean {
+  if (s.type === 'line') return false;
+  if (s.type === 'pen') {
+    const v = s.vertices;
+    return v.length > 2 && v[0][0] === v[v.length - 1][0] && v[0][1] === v[v.length - 1][1];
+  }
+  return true;
+}
 
 function generateHandleFeatures(shape: ShapeAnnotation, vertices?: [number, number][]): GeoJSON.Feature[] {
   const verts = vertices || shape.vertices;
@@ -83,11 +140,10 @@ function generateHandleFeatures(shape: ShapeAnnotation, vertices?: [number, numb
       }
     }
   } else {
-    const count = shape.type === 'polygon' && verts.length > 1 &&
+    const hasClosingVert = verts.length > 1 &&
       verts[0][0] === verts[verts.length - 1][0] &&
-      verts[0][1] === verts[verts.length - 1][1]
-      ? verts.length - 1
-      : verts.length;
+      verts[0][1] === verts[verts.length - 1][1];
+    const count = hasClosingVert ? verts.length - 1 : verts.length;
     for (let i = 0; i < count; i++) {
       features.push({
         type: 'Feature',
@@ -131,6 +187,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
   const [strokeStyle, setStrokeStyle] = useState<StrokeStyle>('solid');
   const [fill, setFill] = useState('#4a90d9');
   const [fillOpacity, setFillOpacity] = useState(0.15);
+  const [fillPattern, setFillPattern] = useState<FillPattern>('solid');
+  const [hatchScale, setHatchScale] = useState(1.0);
   const [rotation, setRotation] = useState(0);
   const [showDirectionArrows, setShowDirectionArrows] = useState(false);
   const [reverseDirection, setReverseDirection] = useState(false);
@@ -146,8 +204,10 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
   const handleDraggedRef = useRef(false);
   const clipboardRef = useRef<ShapeAnnotation | null>(null);
   const altDuplicateRef = useRef(false); // true when current drag is an alt-duplicate
+  const brushDrawingRef = useRef(false);
+  const brushPointsRef = useRef<[number, number][]>([]);
 
-  const isShapeTool = activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line';
+  const isShapeTool = activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line' || activeTool === 'pen' || activeTool === 'brush';
 
   // Subscribe to store
   useEffect(() => {
@@ -162,7 +222,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       drawStartRef.current = null;
     } else {
       const p = consumePending();
-      if (p && (p.tool === 'rectangle' || p.tool === 'ellipse' || p.tool === 'line')) {
+      if (p && (p.tool === 'rectangle' || p.tool === 'ellipse' || p.tool === 'line' || p.tool === 'pen' || p.tool === 'brush')) {
         setSelectedId(p.id);
         const shape = store.getAll().find((s) => s.id === p.id);
         if (shape) loadStyleFromShape(shape);
@@ -178,6 +238,10 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       setTooltipMsg(TOOLTIP_MESSAGES['line-drawing']);
       return;
     }
+    if (activeTool === 'pen' && lineVerticesRef.current.length > 0) {
+      setTooltipMsg(TOOLTIP_MESSAGES['pen-drawing']);
+      return;
+    }
     setTooltipMsg(TOOLTIP_MESSAGES[activeTool!] || '');
   }, [isShapeTool, activeTool, selectedId]);
 
@@ -189,7 +253,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
     const currentSelId = selId !== undefined ? selId : selectedId;
 
     const features: GeoJSON.Feature[] = shps.map((s) => {
-      const isClosed = s.type !== 'line';
+      const isClosed = isClosedShape(s);
       let coords = [...s.vertices];
 
       // Reverse vertex order for direction arrows if requested
@@ -221,12 +285,15 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           strokeStyle: s.strokeStyle || 'solid',
           fill: s.fill,
           fillOpacity: s.fillOpacity,
+          fillPattern: s.fillPattern || 'solid',
+          hatchScale: (s.hatchScale ?? 1).toFixed(1),
           selected: s.id === currentSelId,
           showDirectionArrows: s.showDirectionArrows || false,
         },
       };
     });
 
+    ensurePatternImages(map, shps);
     source.setData({ type: 'FeatureCollection', features });
   }, [map, selectedId]);
 
@@ -368,7 +435,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           const allShapes = store.getAll();
           const features: GeoJSON.Feature[] = allShapes.map((s) => {
             const verts = s.id === handleDragRef.current!.shapeId ? newVertices : s.vertices;
-            const isClosed = s.type !== 'line';
+            const isClosed = isClosedShape(s);
             const coords = [...verts];
             if (isClosed && coords.length > 2) {
               const f = coords[0], l = coords[coords.length - 1];
@@ -382,7 +449,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
               properties: {
                 id: s.id, shapeType: s.type,
                 stroke: s.stroke, strokeWidth: s.strokeWidth, strokeStyle: s.strokeStyle || 'solid',
-                fill: s.fill, fillOpacity: s.fillOpacity,
+                fill: s.fill, fillOpacity: s.fillOpacity, fillPattern: s.fillPattern || 'solid', hatchScale: (s.hatchScale ?? 1).toFixed(1),
                 selected: s.id === handleDragRef.current!.shapeId,
               },
             };
@@ -407,7 +474,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           const allShapes = store.getAll();
           const features: GeoJSON.Feature[] = allShapes.map((s) => {
             const verts = s.id === dragShapeIdRef.current ? moved : s.vertices;
-            const isClosed = s.type !== 'line';
+            const isClosed = isClosedShape(s);
             const coords = [...verts];
             if (isClosed && coords.length > 2) {
               const f = coords[0], l = coords[coords.length - 1];
@@ -421,7 +488,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
               properties: {
                 id: s.id, shapeType: s.type,
                 stroke: s.stroke, strokeWidth: s.strokeWidth, strokeStyle: s.strokeStyle || 'solid',
-                fill: s.fill, fillOpacity: s.fillOpacity,
+                fill: s.fill, fillOpacity: s.fillOpacity, fillPattern: s.fillPattern || 'solid', hatchScale: (s.hatchScale ?? 1).toFixed(1),
                 selected: s.id === dragShapeIdRef.current,
               },
             };
@@ -536,6 +603,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
         strokeStyle,
         fill,
         fillOpacity,
+        fillPattern,
+        hatchScale,
       };
 
       store.add(shape);
@@ -552,7 +621,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       map.off('mouseup', onMouseUp);
       clearPreview();
     };
-  }, [map, activeTool, store, selectedId, stroke, strokeWidth, strokeStyle, fill, fillOpacity, hitTestShape, hitTestHandle, syncHandlesToMap, setPreview, clearPreview]);
+  }, [map, activeTool, store, selectedId, stroke, strokeWidth, strokeStyle, fill, fillOpacity, fillPattern, hatchScale, hitTestShape, hitTestHandle, syncHandlesToMap, setPreview, clearPreview]);
 
   /* ---- Line / Polygon: click to place, right-click to finish ---- */
   useEffect(() => {
@@ -620,7 +689,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           const allShapes = store.getAll();
           const features: GeoJSON.Feature[] = allShapes.map((s) => {
             const verts = s.id === handleDragRef.current!.shapeId ? newVertices : s.vertices;
-            const isClosed = s.type !== 'line';
+            const isClosed = isClosedShape(s);
             const coords = [...verts];
             if (isClosed && coords.length > 2) {
               const f = coords[0], l = coords[coords.length - 1];
@@ -634,7 +703,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
               properties: {
                 id: s.id, shapeType: s.type,
                 stroke: s.stroke, strokeWidth: s.strokeWidth, strokeStyle: s.strokeStyle || 'solid',
-                fill: s.fill, fillOpacity: s.fillOpacity,
+                fill: s.fill, fillOpacity: s.fillOpacity, fillPattern: s.fillPattern || 'solid', hatchScale: (s.hatchScale ?? 1).toFixed(1),
                 selected: s.id === handleDragRef.current!.shapeId,
               },
             };
@@ -658,7 +727,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           const allShapes = store.getAll();
           const features: GeoJSON.Feature[] = allShapes.map((s) => {
             const verts = s.id === dragShapeIdRef.current ? moved : s.vertices;
-            const isClosed = s.type !== 'line';
+            const isClosed = isClosedShape(s);
             const coords = [...verts];
             if (isClosed && coords.length > 2) {
               const f = coords[0], l = coords[coords.length - 1];
@@ -672,7 +741,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
               properties: {
                 id: s.id, shapeType: s.type,
                 stroke: s.stroke, strokeWidth: s.strokeWidth, strokeStyle: s.strokeStyle || 'solid',
-                fill: s.fill, fillOpacity: s.fillOpacity,
+                fill: s.fill, fillOpacity: s.fillOpacity, fillPattern: s.fillPattern || 'solid', hatchScale: (s.hatchScale ?? 1).toFixed(1),
                 selected: s.id === dragShapeIdRef.current,
               },
             };
@@ -789,7 +858,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       map.off('mouseup', onMouseUp);
       clearPreview();
     };
-  }, [map, activeTool, store, selectedId, stroke, strokeWidth, strokeStyle, fill, fillOpacity, hitTestShape, hitTestHandle, syncHandlesToMap, setPreview, clearPreview]);
+  }, [map, activeTool, store, selectedId, stroke, strokeWidth, strokeStyle, fill, fillOpacity, fillPattern, hatchScale, hitTestShape, hitTestHandle, syncHandlesToMap, setPreview, clearPreview]);
 
   const commitLineShape = (vertices: [number, number][], type: 'line' | 'polygon') => {
     const shape: ShapeAnnotation = {
@@ -802,6 +871,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       strokeStyle,
       fill,
       fillOpacity,
+      fillPattern,
+      hatchScale,
     };
     store.add(shape);
     setSelectedId(shape.id);
@@ -809,6 +880,302 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
     clearPreview();
     setTooltipMsg(TOOLTIP_MESSAGES.selected);
   };
+
+  /* ---- Pen tool: click to place, double-click to finish, auto-smooth ---- */
+  useEffect(() => {
+    if (!map || activeTool !== 'pen') return;
+
+    map.doubleClickZoom.disable();
+
+    const CLOSE_THRESHOLD = 12;
+
+    const commitPen = (closed: boolean) => {
+      if (lineVerticesRef.current.length < 2) return;
+      let pts: [number, number][];
+      if (closed) {
+        const v = lineVerticesRef.current;
+        // Wrap neighbors so the spline tangent is smooth through the seam
+        pts = [v[v.length - 1], ...v, v[0], v[1]];
+      } else {
+        pts = lineVerticesRef.current;
+      }
+      let smoothed = sampleSpline(pts, 12);
+      if (closed) {
+        // Strip the extra wrapped segments and close the ring
+        const segsPerSpan = 12;
+        smoothed = smoothed.slice(segsPerSpan, smoothed.length - segsPerSpan);
+        smoothed.push(smoothed[0]);
+      }
+      const shape: ShapeAnnotation = {
+        id: nextId(), type: 'pen', vertices: smoothed, rotation: 0,
+        stroke, strokeWidth, strokeStyle, fill, fillOpacity, fillPattern, hatchScale,
+      };
+      store.add(shape);
+      setSelectedId(shape.id);
+      lineVerticesRef.current = [];
+      clearPreview();
+      setTooltipMsg(TOOLTIP_MESSAGES.selected);
+    };
+
+    let lastClickTime = 0;
+
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      if (isSpaceHeld()) return;
+      if (draggingRef.current || handleDraggedRef.current) return;
+
+      const now = Date.now();
+      if (now - lastClickTime < 350 && lineVerticesRef.current.length >= 2) {
+        // Double-click detected: pop the point added by the first click
+        lineVerticesRef.current.pop();
+        commitPen(false);
+        lastClickTime = 0;
+        return;
+      }
+      lastClickTime = now;
+
+      if (lineVerticesRef.current.length === 0) {
+        const hitId = hitTestShape(e.point);
+        if (hitId) {
+          setSelectedId(hitId);
+          const shape = store.getAll().find((s) => s.id === hitId);
+          if (shape) loadStyleFromShape(shape);
+          return;
+        }
+        const foreign = hitTestAllTools(map, e.point);
+        if (foreign && foreign.tool !== 'pen') {
+          setPending(foreign.tool, foreign.id);
+          setActiveTool(foreign.tool);
+          return;
+        }
+        if (selectedId) { setSelectedId(null); return; }
+      }
+
+      const pt: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+
+      if (lineVerticesRef.current.length >= 3) {
+        const firstVert = lineVerticesRef.current[0];
+        const firstScreen = map.project({ lng: firstVert[0], lat: firstVert[1] });
+        const dist = Math.sqrt((e.point.x - firstScreen.x) ** 2 + (e.point.y - firstScreen.y) ** 2);
+        if (dist < CLOSE_THRESHOLD) {
+          commitPen(true);
+          return;
+        }
+      }
+
+      lineVerticesRef.current.push(pt);
+      setTooltipMsg(TOOLTIP_MESSAGES['pen-drawing']);
+    };
+
+    const onContextMenu = (e: maplibregl.MapMouseEvent) => {
+      e.preventDefault();
+      if (lineVerticesRef.current.length < 2) {
+        lineVerticesRef.current = [];
+        clearPreview();
+        return;
+      }
+      commitPen(false);
+    };
+
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (handleDragRef.current) {
+        const shape = store.getAll().find((s) => s.id === handleDragRef.current!.shapeId);
+        if (!shape) return;
+        const newPos: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const newVerts = [...shape.vertices];
+        newVerts[handleDragRef.current.handleIndex] = newPos;
+        store.update(shape.id, { vertices: newVerts });
+        handleDraggedRef.current = true;
+        return;
+      }
+      if (draggingRef.current && dragStartRef.current && dragShapeIdRef.current) {
+        const shape = store.getAll().find((s) => s.id === dragShapeIdRef.current);
+        if (!shape) return;
+        const dlng = e.lngLat.lng - dragStartRef.current.lng;
+        const dlat = e.lngLat.lat - dragStartRef.current.lat;
+        store.update(shape.id, { vertices: translateVertices(shape.vertices, dlng, dlat) });
+        dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+        return;
+      }
+
+      if (lineVerticesRef.current.length > 0) {
+        const cursor: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const previewPts = [...lineVerticesRef.current, cursor];
+        const smoothPreview = sampleSpline(previewPts, 12);
+        setPreview(smoothPreview, false);
+      }
+    };
+
+    const onMouseDown = (e: maplibregl.MapMouseEvent) => {
+      if (isSpaceHeld() || lineVerticesRef.current.length > 0) return;
+      const handleHit = hitTestHandle(e.point);
+      if (handleHit) {
+        handleDragRef.current = handleHit;
+        handleDraggedRef.current = false;
+        map.dragPan.disable();
+        return;
+      }
+      const hitId = hitTestShape(e.point);
+      if (hitId && hitId === selectedId) {
+        draggingRef.current = true;
+        dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+        dragShapeIdRef.current = hitId;
+        map.dragPan.disable();
+      }
+    };
+
+    const onMouseUp = () => {
+      if (draggingRef.current) { draggingRef.current = false; map.dragPan.enable(); }
+      if (handleDragRef.current) {
+        if (handleDraggedRef.current) {
+          setTimeout(() => { handleDraggedRef.current = false; }, 50);
+        }
+        handleDragRef.current = null;
+        map.dragPan.enable();
+      }
+    };
+
+    map.on('click', onClick);
+    map.on('contextmenu', onContextMenu);
+    map.on('mousemove', onMouseMove);
+    map.on('mousedown', onMouseDown);
+    map.on('mouseup', onMouseUp);
+
+    return () => {
+      map.off('click', onClick);
+      map.off('contextmenu', onContextMenu);
+      map.off('mousemove', onMouseMove);
+      map.off('mousedown', onMouseDown);
+      map.off('mouseup', onMouseUp);
+      map.doubleClickZoom.enable();
+      clearPreview();
+    };
+  }, [map, activeTool, store, selectedId, stroke, strokeWidth, strokeStyle, fill, fillOpacity, fillPattern, hatchScale, hitTestShape, hitTestHandle, syncHandlesToMap, setPreview, clearPreview]);
+
+  /* ---- Brush tool: drag to paint a filled region ---- */
+  useEffect(() => {
+    if (!map || activeTool !== 'brush') return;
+
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      if (isSpaceHeld() || brushDrawingRef.current) return;
+      const hitId = hitTestShape(e.point);
+      if (hitId) {
+        setSelectedId(hitId);
+        const shape = store.getAll().find((s) => s.id === hitId);
+        if (shape) loadStyleFromShape(shape);
+        return;
+      }
+      const foreign = hitTestAllTools(map, e.point);
+      if (foreign && foreign.tool !== 'brush') {
+        setPending(foreign.tool, foreign.id);
+        setActiveTool(foreign.tool);
+        return;
+      }
+      if (selectedId) setSelectedId(null);
+    };
+
+    const onMouseDown = (e: maplibregl.MapMouseEvent) => {
+      if (isSpaceHeld()) return;
+
+      const handleHit = hitTestHandle(e.point);
+      if (handleHit) {
+        handleDragRef.current = handleHit;
+        handleDraggedRef.current = false;
+        map.dragPan.disable();
+        return;
+      }
+
+      const hitId = hitTestShape(e.point);
+      if (hitId && hitId === selectedId) {
+        draggingRef.current = true;
+        dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+        dragShapeIdRef.current = hitId;
+        map.dragPan.disable();
+        return;
+      }
+
+      if (hitId) return;
+
+      brushDrawingRef.current = true;
+      brushPointsRef.current = [[e.lngLat.lng, e.lngLat.lat]];
+      map.dragPan.disable();
+      setTooltipMsg('Drawing... release to finish');
+    };
+
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (handleDragRef.current) {
+        const shape = store.getAll().find((s) => s.id === handleDragRef.current!.shapeId);
+        if (!shape) return;
+        const newPos: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const newVerts = [...shape.vertices];
+        newVerts[handleDragRef.current.handleIndex] = newPos;
+        store.update(shape.id, { vertices: newVerts });
+        handleDraggedRef.current = true;
+        return;
+      }
+      if (draggingRef.current && dragStartRef.current && dragShapeIdRef.current) {
+        const shape = store.getAll().find((s) => s.id === dragShapeIdRef.current);
+        if (!shape) return;
+        const dlng = e.lngLat.lng - dragStartRef.current.lng;
+        const dlat = e.lngLat.lat - dragStartRef.current.lat;
+        store.update(shape.id, { vertices: translateVertices(shape.vertices, dlng, dlat) });
+        dragStartRef.current = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+        return;
+      }
+
+      if (!brushDrawingRef.current) return;
+      brushPointsRef.current.push([e.lngLat.lng, e.lngLat.lat]);
+
+      const simplified = simplifyPath(brushPointsRef.current, 0.00001);
+      const closed: [number, number][] = [...simplified, simplified[0]];
+      setPreview(closed, true);
+    };
+
+    const onMouseUp = () => {
+      if (draggingRef.current) { draggingRef.current = false; map.dragPan.enable(); return; }
+      if (handleDragRef.current) {
+        if (handleDraggedRef.current) {
+          setTimeout(() => { handleDraggedRef.current = false; }, 50);
+        }
+        handleDragRef.current = null;
+        map.dragPan.enable();
+        return;
+      }
+      if (!brushDrawingRef.current) return;
+      brushDrawingRef.current = false;
+      map.dragPan.enable();
+
+      const rawPoints = brushPointsRef.current;
+      brushPointsRef.current = [];
+      if (rawPoints.length < 5) { clearPreview(); setTooltipMsg(TOOLTIP_MESSAGES.brush); return; }
+
+      const simplified = simplifyPath(rawPoints, 0.00001);
+      const vertices: [number, number][] = [...simplified, simplified[0]];
+
+      const shape: ShapeAnnotation = {
+        id: nextId(), type: 'brush', vertices, rotation: 0,
+        stroke, strokeWidth, strokeStyle, fill, fillOpacity, fillPattern, hatchScale,
+      };
+      store.add(shape);
+      setSelectedId(shape.id);
+      clearPreview();
+      setTooltipMsg(TOOLTIP_MESSAGES.selected);
+    };
+
+    map.on('click', onClick);
+    map.on('mousedown', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', onMouseUp);
+
+    return () => {
+      map.off('click', onClick);
+      map.off('mousedown', onMouseDown);
+      map.off('mousemove', onMouseMove);
+      map.off('mouseup', onMouseUp);
+      brushDrawingRef.current = false;
+      brushPointsRef.current = [];
+      clearPreview();
+    };
+  }, [map, activeTool, store, selectedId, stroke, strokeWidth, strokeStyle, fill, fillOpacity, fillPattern, hatchScale, hitTestShape, hitTestHandle, syncHandlesToMap, setPreview, clearPreview]);
 
   /* ---- Cursor + disable box zoom (Shift+drag) so Shift+click works for 45° snap ---- */
   useEffect(() => {
@@ -905,6 +1272,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
     setStrokeStyle(shape.strokeStyle || 'solid');
     setFill(shape.fill);
     setFillOpacity(shape.fillOpacity);
+    setFillPattern(shape.fillPattern || 'solid');
+    setHatchScale(shape.hatchScale ?? 1.0);
     setRotation(shape.rotation || 0);
     setShowDirectionArrows(shape.showDirectionArrows || false);
     setReverseDirection(shape.reverseDirection || false);
@@ -985,7 +1354,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           {selectedShape ? (
             <div className="selection-bar">
               <span className="selection-text">
-                {selectedShape.type.charAt(0).toUpperCase() + selectedShape.type.slice(1)}
+                {{ pen: 'Curves', brush: 'Free Hand' }[selectedShape.type] || selectedShape.type.charAt(0).toUpperCase() + selectedShape.type.slice(1)}
               </span>
               <div className="selection-actions">
                 <button
@@ -1040,7 +1409,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
             <label className="style-label">Width</label>
             <input
               type="range"
-              min="1"
+              min="0"
               max="8"
               step="0.5"
               value={strokeWidth}
@@ -1097,6 +1466,46 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                   />
                 </div>
               </div>
+
+              <div className="style-row">
+                <label className="style-label">Pattern</label>
+                <div className="stroke-style-options">
+                  {([
+                    { value: 'solid' as FillPattern, label: 'Solid', svg: '<rect x="2" y="2" width="28" height="12" fill="currentColor" opacity="0.3"/>' },
+                    { value: 'hatch' as FillPattern, label: 'Hatch', svg: '<rect x="2" y="2" width="28" height="12" fill="currentColor" opacity="0.08"/><line x1="4" y1="14" x2="10" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="10" y1="14" x2="16" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="16" y1="14" x2="22" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="22" y1="14" x2="28" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/>' },
+                    { value: 'crosshatch' as FillPattern, label: 'Cross-hatch', svg: '<rect x="2" y="2" width="28" height="12" fill="currentColor" opacity="0.08"/><line x1="4" y1="14" x2="10" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="10" y1="14" x2="16" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="16" y1="14" x2="22" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="22" y1="14" x2="28" y2="2" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="4" y1="2" x2="10" y2="14" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="10" y1="2" x2="16" y2="14" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="16" y1="2" x2="22" y2="14" stroke="currentColor" stroke-width="1" opacity="0.5"/><line x1="22" y1="2" x2="28" y2="14" stroke="currentColor" stroke-width="1" opacity="0.5"/>' },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      className={`stroke-style-btn ${fillPattern === opt.value ? 'stroke-style-btn-active' : ''}`}
+                      onClick={() => { setFillPattern(opt.value); applyStyle({ fillPattern: opt.value }); }}
+                      title={opt.label}
+                    >
+                      <svg viewBox="0 0 32 16" width="32" height="16" dangerouslySetInnerHTML={{ __html: opt.svg }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {fillPattern !== 'solid' && (
+                <div className="style-row">
+                  <label className="style-label">Scale</label>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="3"
+                    step="0.1"
+                    value={hatchScale}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setHatchScale(val);
+                      applyStyle({ hatchScale: val });
+                    }}
+                    className="style-slider"
+                  />
+                  <span className="style-value">{hatchScale.toFixed(1)}x</span>
+                </div>
+              )}
 
               <div className="style-row">
                 <label className="style-label">Opacity</label>

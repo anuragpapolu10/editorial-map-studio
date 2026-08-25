@@ -1,10 +1,11 @@
 /** Shape data model and undo/redo store */
 
 export type StrokeStyle = 'solid' | 'dashed' | 'dotted';
+export type FillPattern = 'solid' | 'hatch' | 'crosshatch';
 
 export interface ShapeAnnotation {
   id: string;
-  type: 'rectangle' | 'ellipse' | 'line' | 'polygon';
+  type: 'rectangle' | 'ellipse' | 'line' | 'polygon' | 'pen' | 'brush';
   vertices: [number, number][]; // [lng, lat] pairs — already includes rotation
   rotation: number; // degrees, tracked for UI; vertices are the rotated coords
   stroke: string;
@@ -12,6 +13,8 @@ export interface ShapeAnnotation {
   strokeStyle: StrokeStyle;
   fill: string;
   fillOpacity: number;
+  fillPattern?: FillPattern;
+  hatchScale?: number;
   showDirectionArrows?: boolean;
   reverseDirection?: boolean;
 }
@@ -264,4 +267,82 @@ export function resizeEllipseCardinal(
     return rotateVertices(newVerts, [cx, cy], rot);
   }
   return newVerts;
+}
+
+/* ---- Douglas-Peucker path simplification ---- */
+
+function perpendicularDist(
+  pt: [number, number],
+  lineStart: [number, number],
+  lineEnd: [number, number],
+): number {
+  const dx = lineEnd[0] - lineStart[0];
+  const dy = lineEnd[1] - lineStart[1];
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt((pt[0] - lineStart[0]) ** 2 + (pt[1] - lineStart[1]) ** 2);
+  const t = Math.max(0, Math.min(1, ((pt[0] - lineStart[0]) * dx + (pt[1] - lineStart[1]) * dy) / lenSq));
+  const projX = lineStart[0] + t * dx;
+  const projY = lineStart[1] + t * dy;
+  return Math.sqrt((pt[0] - projX) ** 2 + (pt[1] - projY) ** 2);
+}
+
+export function simplifyPath(
+  points: [number, number][],
+  epsilon: number,
+): [number, number][] {
+  if (points.length <= 2) return [...points];
+  let maxDist = 0;
+  let maxIdx = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpendicularDist(points[i], points[0], points[points.length - 1]);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > epsilon) {
+    const left = simplifyPath(points.slice(0, maxIdx + 1), epsilon);
+    const right = simplifyPath(points.slice(maxIdx), epsilon);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [points[0], points[points.length - 1]];
+}
+
+/* ---- Path buffering (creates a polygon from a polyline + radius) ---- */
+
+export function bufferPath(
+  points: [number, number][],
+  radius: number,
+): [number, number][] {
+  if (points.length < 2) return [];
+  const left: [number, number][] = [];
+  const right: [number, number][] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    let nx: number, ny: number;
+    if (i === 0) {
+      const dx = points[1][0] - points[0][0];
+      const dy = points[1][1] - points[0][1];
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      nx = -dy / len; ny = dx / len;
+    } else if (i === points.length - 1) {
+      const dx = points[i][0] - points[i - 1][0];
+      const dy = points[i][1] - points[i - 1][1];
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      nx = -dy / len; ny = dx / len;
+    } else {
+      const dx1 = points[i][0] - points[i - 1][0];
+      const dy1 = points[i][1] - points[i - 1][1];
+      const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1) || 1;
+      const dx2 = points[i + 1][0] - points[i][0];
+      const dy2 = points[i + 1][1] - points[i][1];
+      const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2) || 1;
+      nx = -(dy1 / len1 + dy2 / len2) / 2;
+      ny = (dx1 / len1 + dx2 / len2) / 2;
+      const nlen = Math.sqrt(nx * nx + ny * ny) || 1;
+      nx /= nlen; ny /= nlen;
+    }
+    left.push([points[i][0] + nx * radius, points[i][1] + ny * radius]);
+    right.push([points[i][0] - nx * radius, points[i][1] - ny * radius]);
+  }
+
+  const polygon = [...left, ...right.reverse(), left[0]];
+  return polygon;
 }

@@ -17,7 +17,7 @@ import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
 import type { HeatmapLegendInfo } from '../dataStore';
 
-export type ActiveTool = null | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line';
+export type ActiveTool = null | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'brush';
 
 type SidebarTab = 'drawing' | 'data';
 
@@ -75,30 +75,32 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
 
         <div className="sidebar-section">
           <h2>Drawing Tools</h2>
-          <DrawingTools
-            map={map}
-            store={annotationStore}
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-          />
-          <MarkerTools
-            map={map}
-            store={markerStore}
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-          />
-          <ArrowTools
-            map={map}
-            store={arrowStore}
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-          />
-          <ShapeTools
-            map={map}
-            store={shapeStore}
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-          />
+          <div className="tools-grid">
+            <DrawingTools
+              map={map}
+              store={annotationStore}
+              activeTool={activeTool}
+              setActiveTool={setActiveTool}
+            />
+            <MarkerTools
+              map={map}
+              store={markerStore}
+              activeTool={activeTool}
+              setActiveTool={setActiveTool}
+            />
+            <ArrowTools
+              map={map}
+              store={arrowStore}
+              activeTool={activeTool}
+              setActiveTool={setActiveTool}
+            />
+            <ShapeTools
+              map={map}
+              store={shapeStore}
+              activeTool={activeTool}
+              setActiveTool={setActiveTool}
+            />
+          </div>
         </div>
 
         <div className="sidebar-section">

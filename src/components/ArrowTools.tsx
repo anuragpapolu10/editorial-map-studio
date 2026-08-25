@@ -542,7 +542,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
           <div className="style-row">
             <label className="style-label">Width</label>
             <input
-              type="range" min="1" max="8" step="0.5"
+              type="range" min="0" max="8" step="0.5"
               value={strokeWidth}
               onChange={(e) => {
                 const val = Number(e.target.value);
