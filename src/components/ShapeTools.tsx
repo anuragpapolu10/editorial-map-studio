@@ -348,21 +348,33 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       [point.x - 10, point.y - 10], [point.x + 10, point.y + 10],
     ];
     const features = map.queryRenderedFeatures(bbox, { layers: [SHAPE_HANDLE_LAYER_ID] });
-    if (features.length === 0) return null;
-    return {
-      shapeId: features[0].properties?.shapeId as string,
-      handleIndex: features[0].properties?.handleIndex as number,
-      handleType: features[0].properties?.handleType as string,
-    };
-  }, [map]);
+    for (const f of features) {
+      const shapeId = f.properties?.shapeId as string;
+      const shape = store.getAll().find((s) => s.id === shapeId);
+      if (shape?.locked) continue;
+      return {
+        shapeId,
+        handleIndex: f.properties?.handleIndex as number,
+        handleType: f.properties?.handleType as string,
+      };
+    }
+    return null;
+  }, [map, store]);
 
   const hitTestShape = useCallback((point: maplibregl.Point): string | null => {
     if (!map) return null;
     const queryLayers = SHAPE_LAYER_IDS.filter((id) => map.getLayer(id));
     if (queryLayers.length === 0) return null;
     const features = map.queryRenderedFeatures(point, { layers: queryLayers });
-    return features.length > 0 ? (features[0].properties?.id ?? null) : null;
-  }, [map]);
+    const allShapes = store.getAll();
+    for (const f of features) {
+      const id = f.properties?.id;
+      if (!id) continue;
+      const shape = allShapes.find((s) => s.id === id);
+      if (shape && !shape.locked) return id;
+    }
+    return null;
+  }, [map, store]);
 
   // Sync handles when selection or shapes change
   useEffect(() => {
@@ -794,6 +806,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       if (e.originalEvent.altKey) {
         const shape = store.getAll().find((s) => s.id === hitId);
         if (shape) {
+          loadStyleFromShape(shape);
           const dup: ShapeAnnotation = {
             ...shape,
             id: nextId(),
@@ -805,6 +818,9 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           altDuplicateRef.current = true;
         }
       } else {
+        const shape = store.getAll().find((s) => s.id === hitId);
+        if (shape) loadStyleFromShape(shape);
+        setSelectedId(hitId);
         dragShapeIdRef.current = hitId;
         altDuplicateRef.current = false;
       }
@@ -1346,6 +1362,17 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
         </button>
       ))}
 
+      {/* Unlock all — shown when locked shapes exist */}
+      {isShapeTool && shapes.some(s => s.locked) && !selectedShape && (
+        <button
+          className="action-btn"
+          style={{ fontSize: 11, marginTop: 6, width: '100%' }}
+          onClick={() => shapes.filter(s => s.locked).forEach(s => store.update(s.id, { locked: false }))}
+        >
+          Unlock all shapes
+        </button>
+      )}
+
       {/* Controls — shown when a shape tool is active */}
       {isShapeTool && (
         <div className="text-style-controls">
@@ -1356,6 +1383,19 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                 {({ pen: 'Curves', brush: 'Free Hand' } as Record<string, string>)[selectedShape.type] || selectedShape.type.charAt(0).toUpperCase() + selectedShape.type.slice(1)}
               </span>
               <div className="selection-actions">
+                <button
+                  className={`icon-btn${selectedShape.locked ? ' icon-btn-active' : ''}`}
+                  onClick={() => store.update(selectedShape.id, { locked: !selectedShape.locked })}
+                  title={selectedShape.locked ? 'Unlock' : 'Lock'}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+                    {selectedShape.locked ? (
+                      <path d="M4 7V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h1zm2 0h4V5a2 2 0 10-4 0v2zm2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                    ) : (
+                      <path d="M10 7V5a2 2 0 10-4 0v1H4V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h7zm-2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                    )}
+                  </svg>
+                </button>
                 <button
                   className="icon-btn icon-btn-danger"
                   onClick={() => { store.remove(selectedShape.id); setSelectedId(null); }}

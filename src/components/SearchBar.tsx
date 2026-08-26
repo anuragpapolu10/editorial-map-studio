@@ -2,12 +2,14 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { Map as MLMap } from 'maplibre-gl';
 import type { ShapeStore, ShapeAnnotation } from '../shapes';
+import type { MarkerStore } from '../markers';
 import type { ActiveTool } from './Sidebar';
 import { setPending } from '../crossSelect';
 
 interface SearchBarProps {
   map: MLMap | null;
   shapeStore: ShapeStore;
+  markerStore: MarkerStore;
   setActiveTool: (tool: ActiveTool) => void;
 }
 
@@ -35,6 +37,40 @@ function formatResult(p: PhotonFeature['properties']): string {
   return parts.join(', ');
 }
 
+function parseCoordinates(q: string): { lat: number; lng: number } | null {
+  const s = q.trim();
+
+  // Simple decimal: "40.7, -74.0" or "40.7 -74.0"
+  const simple = s.match(/^(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)$/);
+  if (simple) {
+    const lat = parseFloat(simple[1]);
+    const lng = parseFloat(simple[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  // Degrees with direction: "28.550°N 85.538°E" or "28.550 N, 85.538 E"
+  const degDir = s.match(/(-?\d+\.?\d*)\s*°?\s*([NSns])\s*[,\s]\s*(-?\d+\.?\d*)\s*°?\s*([EWew])/);
+  if (degDir) {
+    let lat = parseFloat(degDir[1]);
+    let lng = parseFloat(degDir[3]);
+    if (degDir[2].toUpperCase() === 'S') lat = -lat;
+    if (degDir[4].toUpperCase() === 'W') lng = -lng;
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  // DMS: 40°26'46"N 79°58'56"W or 40°26′46″N, 79°58′56″W
+  const dms = s.match(/(\d+)\s*[°]\s*(\d+)\s*[′']\s*([\d.]+)\s*[″"]?\s*([NSns])\s*[,\s]\s*(\d+)\s*[°]\s*(\d+)\s*[′']\s*([\d.]+)\s*[″"]?\s*([EWew])/);
+  if (dms) {
+    let lat = parseInt(dms[1]) + parseInt(dms[2]) / 60 + parseFloat(dms[3]) / 3600;
+    let lng = parseInt(dms[5]) + parseInt(dms[6]) / 60 + parseFloat(dms[7]) / 3600;
+    if (dms[4].toUpperCase() === 'S') lat = -lat;
+    if (dms[8].toUpperCase() === 'W') lng = -lng;
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  }
+
+  return null;
+}
+
 function zoomForType(p: PhotonFeature['properties']): number {
   const val = p.osm_value || p.type || '';
   if (['continent'].includes(val)) return 3;
@@ -46,7 +82,7 @@ function zoomForType(p: PhotonFeature['properties']): number {
   return 15;
 }
 
-export function SearchBar({ map, shapeStore, setActiveTool }: SearchBarProps) {
+export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PhotonFeature[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -61,8 +97,7 @@ export function SearchBar({ map, shapeStore, setActiveTool }: SearchBarProps) {
       return;
     }
 
-    const coordMatch = q.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
-    if (coordMatch) {
+    if (parseCoordinates(q)) {
       setResults([]);
       return;
     }
@@ -199,11 +234,16 @@ export function SearchBar({ map, shapeStore, setActiveTool }: SearchBarProps) {
 
   const handleCoordSearch = () => {
     if (!map || !query.trim()) return;
-    const coordMatch = query.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1]);
-      const lng = parseFloat(coordMatch[2]);
-      map.flyTo({ center: [lng, lat], zoom: 12, duration: 1500 });
+    const coords = parseCoordinates(query);
+    if (coords) {
+      map.flyTo({ center: [coords.lng, coords.lat], zoom: 12, duration: 1500 });
+      markerStore.add({
+        id: crypto.randomUUID(),
+        lng: coords.lng, lat: coords.lat,
+        shape: 'pin',
+        color: '#c0392b',
+        size: 1,
+      });
       setShowDropdown(false);
     }
   };

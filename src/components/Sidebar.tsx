@@ -49,7 +49,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
 
       <div className="sidebar-section">
         <h2>Navigate</h2>
-        <SearchBar map={map} shapeStore={shapeStore} setActiveTool={setActiveTool} />
+        <SearchBar map={map} shapeStore={shapeStore} markerStore={markerStore} setActiveTool={setActiveTool} />
       </div>
 
       <div className="sidebar-tab-bar">

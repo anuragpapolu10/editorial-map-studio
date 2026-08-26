@@ -511,6 +511,11 @@ html, body, #root {
   color: #333;
 }
 
+.icon-btn-active {
+  color: #2980b9;
+  background: rgba(41,128,185,0.12);
+}
+
 .icon-btn-danger {
   color: #c0392b;
 }

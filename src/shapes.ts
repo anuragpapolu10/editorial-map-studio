@@ -17,6 +17,7 @@ export interface ShapeAnnotation {
   hatchScale?: number;
   showDirectionArrows?: boolean;
   reverseDirection?: boolean;
+  locked?: boolean;
 }
 
 type Action =
