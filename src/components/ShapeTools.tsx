@@ -110,7 +110,7 @@ function ensurePatternImages(map: maplibregl.Map, shapes: ShapeAnnotation[]) {
 
 function isClosedShape(s: ShapeAnnotation): boolean {
   if (s.type === 'line') return false;
-  if (s.type === 'pen') {
+  if (s.type === 'pen' || s.type === 'brush') {
     const v = s.vertices;
     return v.length > 2 && v[0][0] === v[v.length - 1][0] && v[0][1] === v[v.length - 1][1];
   }
@@ -1126,8 +1126,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       brushPointsRef.current.push([e.lngLat.lng, e.lngLat.lat]);
 
       const simplified = simplifyPath(brushPointsRef.current, 0.00001);
-      const closed: [number, number][] = [...simplified, simplified[0]];
-      setPreview(closed, true);
+      setPreview(simplified, false);
     };
 
     const onMouseUp = () => {
@@ -1149,7 +1148,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       if (rawPoints.length < 5) { clearPreview(); setTooltipMsg(TOOLTIP_MESSAGES.brush); return; }
 
       const simplified = simplifyPath(rawPoints, 0.00001);
-      const vertices: [number, number][] = [...simplified, simplified[0]];
+      const vertices: [number, number][] = simplified;
 
       const shape: ShapeAnnotation = {
         id: nextId(), type: 'brush', vertices, rotation: 0,
