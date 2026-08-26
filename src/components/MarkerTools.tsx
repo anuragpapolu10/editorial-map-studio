@@ -116,11 +116,16 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
       const layer = map.getLayer(MARKER_LAYER_ID) ? MARKER_LAYER_ID : null;
       if (layer) {
         const features = map.queryRenderedFeatures(e.point, { layers: [layer] });
-        if (features.length > 0) {
-          const id = features[0].properties?.id;
+        const allMkrs = store.getAll();
+        const hit = features.find(f => {
+          const m = allMkrs.find(m => m.id === f.properties?.id);
+          return m && !m.locked;
+        });
+        if (hit) {
+          const id = hit.properties?.id;
           if (id) {
             setSelectedId(id);
-            const mkr = store.getAll().find((m) => m.id === id);
+            const mkr = allMkrs.find((m) => m.id === id);
             if (mkr) loadStyleFromMarker(mkr);
           }
           return;
@@ -171,7 +176,13 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
       const features = map.queryRenderedFeatures(e.point, { layers: [layer] });
       if (features.length === 0) return;
 
-      const id = features[0].properties?.id;
+      const allMkrs = store.getAll();
+      const hit = features.find(f => {
+        const m = allMkrs.find(m => m.id === f.properties?.id);
+        return m && !m.locked;
+      });
+      if (!hit) return;
+      const id = hit.properties?.id;
       if (!id) return;
 
       // Alt+drag: duplicate the marker and drag the copy
@@ -271,7 +282,11 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
       const layer = map.getLayer(MARKER_LAYER_ID) ? MARKER_LAYER_ID : null;
       if (layer) {
         const features = map.queryRenderedFeatures(e.point, { layers: [layer] });
-        canvas.style.cursor = features.length > 0 ? 'grab' : getCrossCursor(map, e.point, 'marker');
+        const unlocked = features.filter(f => {
+          const m = store.getAll().find(m => m.id === f.properties?.id);
+          return m && !m.locked;
+        });
+        canvas.style.cursor = unlocked.length > 0 ? 'grab' : getCrossCursor(map, e.point, 'marker');
       } else {
         canvas.style.cursor = getCrossCursor(map, e.point, 'marker');
       }
@@ -369,6 +384,18 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
                 {selectedMarker.shape.charAt(0).toUpperCase() + selectedMarker.shape.slice(1)} marker
               </span>
               <div className="selection-actions">
+                <button
+                  className={`icon-btn ${selectedMarker.locked ? 'icon-btn-locked' : 'icon-btn-lock'}`}
+                  onClick={() => { store.update(selectedMarker.id, { locked: !selectedMarker.locked }); if (!selectedMarker.locked) setSelectedId(null); }}
+                  title={selectedMarker.locked ? 'Unlock' : 'Lock'}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+                    {selectedMarker.locked
+                      ? <path d="M4 7V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h1zm2 0h4V5a2 2 0 10-4 0v2zm2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                      : <path d="M10 7V5a2 2 0 10-4 0v1H4V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h7zm-2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                    }
+                  </svg>
+                </button>
                 <button
                   className="icon-btn icon-btn-danger"
                   onClick={() => { store.remove(selectedMarker.id); setSelectedId(null); }}

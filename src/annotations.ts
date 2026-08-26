@@ -13,6 +13,7 @@ export interface TextAnnotation {
   rotation: number; // degrees, 0 = horizontal
   showBackground: boolean;
   textStroke: 'white' | 'black' | 'none';
+  locked?: boolean;
 }
 
 type Action =

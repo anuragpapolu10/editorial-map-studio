@@ -9,6 +9,7 @@ export interface MarkerAnnotation {
   shape: MarkerShape;
   color: string;
   size: number; // 0.5 – 2, multiplier on base icon size
+  locked?: boolean;
 }
 
 type Action =

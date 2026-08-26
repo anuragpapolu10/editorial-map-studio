@@ -103,18 +103,29 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
     const queryLayers = ARROW_SHAFT_LAYER_IDS.filter((id) => map.getLayer(id));
     if (queryLayers.length === 0) return null;
     const features = map.queryRenderedFeatures(hitBbox(point), { layers: queryLayers });
-    return features.length > 0 ? (features[0].properties?.id ?? null) : null;
-  }, [map]);
+    const allArrows = store.getAll();
+    for (const f of features) {
+      const id = f.properties?.id;
+      if (!id) continue;
+      const arrow = allArrows.find(a => a.id === id);
+      if (arrow && !arrow.locked) return id;
+    }
+    return null;
+  }, [map, store]);
 
   const hitTestCpHandle = useCallback((point: maplibregl.Point): { id: string; ptIndex: number } | null => {
     if (!map) return null;
     if (!map.getLayer(ARROW_CP_HANDLE_LAYER_ID)) return null;
     const features = map.queryRenderedFeatures(hitBbox(point, 10), { layers: [ARROW_CP_HANDLE_LAYER_ID] });
-    if (features.length === 0) return null;
-    const props = features[0].properties;
-    if (!props?.id || props?.cpIndex === undefined) return null;
-    return { id: props.id, ptIndex: Number(props.cpIndex) };
-  }, [map]);
+    for (const f of features) {
+      const props = f.properties;
+      if (!props?.id || props?.cpIndex === undefined) continue;
+      const arrow = store.getAll().find(a => a.id === props.id);
+      if (arrow?.locked) continue;
+      return { id: props.id, ptIndex: Number(props.cpIndex) };
+    }
+    return null;
+  }, [map, store]);
 
   /* ---- Preview ---- */
   const setPreview = useCallback((features: GeoJSON.Feature[]) => {
@@ -495,6 +506,18 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
                 Arrow{selectedArrow.points.length > 2 ? ` · ${selectedArrow.points.length - 2} bend${selectedArrow.points.length > 3 ? 's' : ''}` : ''}
               </span>
               <div className="selection-actions">
+                <button
+                  className={`icon-btn ${selectedArrow.locked ? 'icon-btn-locked' : 'icon-btn-lock'}`}
+                  onClick={() => { store.update(selectedArrow.id, { locked: !selectedArrow.locked }); if (!selectedArrow.locked) setSelectedId(null); }}
+                  title={selectedArrow.locked ? 'Unlock' : 'Lock'}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+                    {selectedArrow.locked
+                      ? <path d="M4 7V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h1zm2 0h4V5a2 2 0 10-4 0v2zm2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                      : <path d="M10 7V5a2 2 0 10-4 0v1H4V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h7zm-2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                    }
+                  </svg>
+                </button>
                 <button
                   className="icon-btn icon-btn-danger"
                   onClick={() => { store.remove(selectedArrow.id); setSelectedId(null); }}

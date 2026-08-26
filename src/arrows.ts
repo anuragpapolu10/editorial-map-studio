@@ -10,6 +10,7 @@ export interface ArrowAnnotation {
   strokeStyle: StrokeStyle;
   bidirectional?: boolean;
   headScale?: number; // multiplier for arrowhead size, default 1
+  locked?: boolean;
 }
 
 /* ---- Catmull-Rom spline math ---- */

@@ -13,6 +13,7 @@ import { SHAPE_LAYER_IDS, SHAPE_HANDLE_LAYER_ID } from './MapView';
 import type { ActiveTool } from './Sidebar';
 import { isSpaceHeld, subscribeSpace } from '../spacebar';
 import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../crossSelect';
+import { NumericInput } from './NumericInput';
 import { snapTo45, snapSquare, snapCircle } from '../snap';
 import { ColorPickerPopover } from './ColorPickerPopover';
 
@@ -1366,10 +1367,10 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
       {isShapeTool && shapes.some(s => s.locked) && !selectedShape && (
         <button
           className="action-btn"
-          style={{ fontSize: 11, marginTop: 6, width: '100%' }}
+          style={{ fontSize: 11, marginTop: 6, width: '100%', background: '#e67e22', color: '#fff', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
           onClick={() => shapes.filter(s => s.locked).forEach(s => store.update(s.id, { locked: false }))}
         >
-          Unlock all shapes
+          Unlock all shapes ({shapes.filter(s => s.locked).length})
         </button>
       )}
 
@@ -1384,8 +1385,8 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
               </span>
               <div className="selection-actions">
                 <button
-                  className={`icon-btn${selectedShape.locked ? ' icon-btn-active' : ''}`}
-                  onClick={() => store.update(selectedShape.id, { locked: !selectedShape.locked })}
+                  className={`icon-btn ${selectedShape.locked ? 'icon-btn-locked' : 'icon-btn-lock'}`}
+                  onClick={() => { store.update(selectedShape.id, { locked: !selectedShape.locked }); if (!selectedShape.locked) setSelectedId(null); }}
                   title={selectedShape.locked ? 'Unlock' : 'Lock'}
                 >
                   <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
@@ -1578,8 +1579,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                 value={rotation}
                 onChange={(e) => {
                   const newRot = Number(e.target.value);
-                  const oldRot = rotation;
-                  const delta = newRot - oldRot;
+                  const delta = newRot - rotation;
                   if (delta === 0) return;
                   setRotation(newRot);
                   if (selectedId) {
@@ -1593,7 +1593,25 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
                 }}
                 className="style-slider"
               />
-              <span className="style-value">{rotation}°</span>
+              <NumericInput
+                value={rotation}
+                min={-180}
+                max={180}
+                unit="°"
+                onChange={(newRot) => {
+                  const delta = newRot - rotation;
+                  if (delta === 0) return;
+                  setRotation(newRot);
+                  if (selectedId) {
+                    const shape = store.getAll().find((s) => s.id === selectedId);
+                    if (shape) {
+                      const center = getCentroid(shape.vertices);
+                      const newVerts = rotateVertices(shape.vertices, center, delta);
+                      store.update(selectedId, { vertices: newVerts, rotation: newRot });
+                    }
+                  }
+                }}
+              />
             </div>
           )}
 

@@ -8,53 +8,13 @@ import { hitTestAllTools, setPending, consumePending, getCrossCursor } from '../
 
 import type { ActiveTool } from './Sidebar';
 import { ColorPickerPopover } from './ColorPickerPopover';
+import { NumericInput } from './NumericInput';
 
 interface DrawingToolsProps {
   map: maplibregl.Map | null;
   store: AnnotationStore;
   activeTool: ActiveTool;
   setActiveTool: (tool: ActiveTool) => void;
-}
-
-/** Numeric input that allows free typing (including "-") and commits on blur/Enter */
-function NumericInput({ value, min, max, unit, onChange }: {
-  value: number; min: number; max: number; unit: string;
-  onChange: (v: number) => void;
-}) {
-  const [local, setLocal] = useState(String(value));
-  const [focused, setFocused] = useState(false);
-
-  // Sync from parent when not focused (e.g. slider changed)
-  useEffect(() => {
-    if (!focused) setLocal(String(value));
-  }, [value, focused]);
-
-  const commit = () => {
-    const num = Number(local);
-    if (isNaN(num) || local.trim() === '' || local.trim() === '-') {
-      setLocal(String(value));
-    } else {
-      const clamped = Math.max(min, Math.min(max, Math.round(num)));
-      onChange(clamped);
-      setLocal(String(clamped));
-    }
-  };
-
-  return (
-    <div className="style-value-input-wrap">
-      <input
-        type="text"
-        inputMode="numeric"
-        className="style-value-input"
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => { setFocused(false); commit(); }}
-        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-      />
-      <span className="style-value-unit">{unit}</span>
-    </div>
-  );
 }
 
 const COLORS = [
@@ -180,13 +140,18 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
         : [];
 
       if (features.length > 0) {
-        const id = features[0].properties?.id;
-        if (id) {
+        const allAnns = store.getAll();
+        const hit = features.find(f => {
+          const a = allAnns.find(a => a.id === f.properties?.id);
+          return a && !a.locked;
+        });
+        if (hit) {
+          const id = hit.properties?.id;
           setSelectedId(id);
-          const ann = store.getAll().find((a) => a.id === id);
+          const ann = allAnns.find((a) => a.id === id);
           if (ann) loadStyleFromAnnotation(ann);
+          return;
         }
-        return;
       }
 
       // Check if clicking on another tool's element
@@ -236,12 +201,17 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
         : [];
 
       if (features.length > 0) {
-        const id = features[0].properties?.id;
-        if (id) {
-          const ann = store.getAll().find((a) => a.id === id);
+        const allAnns = store.getAll();
+        const hit = features.find(f => {
+          const a = allAnns.find(a => a.id === f.properties?.id);
+          return a && !a.locked;
+        });
+        if (hit) {
+          const id = hit.properties?.id;
+          const ann = allAnns.find((a) => a.id === id);
           if (ann) {
             e.preventDefault();
-            setSelectedId(id);
+            setSelectedId(id!);
             loadStyleFromAnnotation(ann);
             setEditingId(id);
             setEditText(ann.text);
@@ -269,7 +239,13 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
         : [];
       if (features.length === 0) return;
 
-      const id = features[0].properties?.id;
+      const allAnns = store.getAll();
+      const hit = features.find(f => {
+        const a = allAnns.find(a => a.id === f.properties?.id);
+        return a && !a.locked;
+      });
+      if (!hit) return;
+      const id = hit.properties?.id;
       if (!id) return;
 
       // Alt+drag: duplicate the annotation and drag the copy
@@ -384,7 +360,11 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
       const features = queryLayers.length > 0
         ? map.queryRenderedFeatures(e.point, { layers: queryLayers })
         : [];
-      canvas.style.cursor = features.length > 0 ? 'grab' : getCrossCursor(map, e.point, 'text');
+      const unlocked = features.filter(f => {
+        const a = store.getAll().find(a => a.id === f.properties?.id);
+        return a && !a.locked;
+      });
+      canvas.style.cursor = unlocked.length > 0 ? 'grab' : getCrossCursor(map, e.point, 'text');
     };
 
     const unsubSpace = subscribeSpace((held) => {
@@ -508,6 +488,18 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
                   <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M12.1 1.5a1.5 1.5 0 012.1 2.1L5.6 12.2l-3 .8.8-3L12.1 1.5z"/></svg>
                 </button>
                 <button
+                  className={`icon-btn ${selectedAnn.locked ? 'icon-btn-locked' : 'icon-btn-lock'}`}
+                  onClick={() => { store.update(selectedAnn.id, { locked: !selectedAnn.locked }); if (!selectedAnn.locked) setSelectedId(null); }}
+                  title={selectedAnn.locked ? 'Unlock' : 'Lock'}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+                    {selectedAnn.locked
+                      ? <path d="M4 7V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h1zm2 0h4V5a2 2 0 10-4 0v2zm2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                      : <path d="M10 7V5a2 2 0 10-4 0v1H4V5a4 4 0 118 0v2h1a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8a1 1 0 011-1h7zm-2 3a1 1 0 100 2 1 1 0 000-2z"/>
+                    }
+                  </svg>
+                </button>
+                <button
                   className="icon-btn icon-btn-danger"
                   onClick={() => { store.remove(selectedAnn.id); setSelectedId(null); }}
                   title="Delete (Del)"
@@ -618,6 +610,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
               type="range"
               min="-180"
               max="180"
+              step="1"
               value={rotation}
               onChange={(e) => {
                 const val = Number(e.target.value);

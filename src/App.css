@@ -511,9 +511,22 @@ html, body, #root {
   color: #333;
 }
 
-.icon-btn-active {
-  color: #2980b9;
-  background: rgba(41,128,185,0.12);
+.icon-btn-lock {
+  color: #888;
+}
+
+.icon-btn-lock:hover {
+  color: #e67e22;
+  background: rgba(230,126,34,0.12);
+}
+
+.icon-btn-locked {
+  color: #e67e22;
+  background: rgba(230,126,34,0.15);
+}
+
+.icon-btn-locked:hover {
+  background: rgba(230,126,34,0.25);
 }
 
 .icon-btn-danger {
@@ -605,14 +618,14 @@ html, body, #root {
 .style-value-input-wrap {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
-  min-width: 63px;
+  min-width: 34px;
   justify-content: flex-end;
 }
 
 .style-value-input {
-  width: 44px;
+  width: 38px;
   padding: 4px 6px;
   border: 1px solid #d1d1d1;
   border-radius: 3px;
@@ -639,7 +652,8 @@ html, body, #root {
 .style-value-unit {
   font-size: 11px;
   color: #999;
-  min-width: 12px;
+  min-width: 14px;
+  text-align: right;
 }
 
 /* Font family toggle */
