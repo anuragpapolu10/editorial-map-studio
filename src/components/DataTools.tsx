@@ -13,6 +13,17 @@ import {
 } from '../choropleth';
 import type { UploadedGeoData } from '../geojsonUpload';
 import { parseGeoFile, getGeometryType, getBounds } from '../geojsonUpload';
+import {
+  BUILT_IN_BOUNDARIES,
+  BOUNDARY_GROUPS,
+  detectBoundaryType,
+  deduplicateFeatures,
+  fetchBoundaryGeoJSON,
+  findJoinField,
+  getFieldNames,
+  joinWithBoundaries,
+} from '../boundaryLookup';
+import type { BoundaryType } from '../boundaryLookup';
 
 const SOURCE_ID = 'data-points-source';
 const LAYER_ID = 'data-points-layer';
@@ -120,6 +131,15 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
   const [expandedGeoLayers, setExpandedGeoLayers] = useState<Set<string>>(new Set());
   const geoFileRef = useRef<HTMLInputElement>(null);
   const choroFileRef = useRef<HTMLInputElement>(null);
+  const boundaryFileRef = useRef<HTMLInputElement>(null);
+  const [boundaryDetection, setBoundaryDetection] = useState<{ type: BoundaryType; column: string } | null>(null);
+  const [boundaryLoading, setBoundaryLoading] = useState(false);
+  const [boundaryProgress, setBoundaryProgress] = useState('');
+  const [boundaryError, setBoundaryError] = useState<string | null>(null);
+  const [customBoundaryData, setCustomBoundaryData] = useState<UploadedGeoData | null>(null);
+  const [customBoundaryJoinCol, setCustomBoundaryJoinCol] = useState('');
+  const [customCsvJoinCol, setCustomCsvJoinCol] = useState('');
+  const [showCustomBoundary, setShowCustomBoundary] = useState(false);
 
   const update = useCallback((patch: Partial<DataState>) => {
     setData(prev => ({ ...prev, ...patch }));
@@ -167,6 +187,91 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     setGeocoding({ active: false, done: 0, total: 0 });
   }, []);
 
+  const handleBoundaryJoin = useCallback(async (
+    csvRows: DataRow[],
+    csvColumns: string[],
+    csvCodeCol: string,
+    geojson: GeoJSON.FeatureCollection,
+    geoJoinField: string,
+  ) => {
+    const result = joinWithBoundaries(csvRows, csvColumns, csvCodeCol, geojson, geoJoinField);
+    setData(prev => ({
+      ...prev,
+      rows: result.newRows,
+      columns: result.newColumns,
+      latCol: '_boundary_lat',
+      lngCol: '_boundary_lng',
+    }));
+    setBoundaryLoading(false);
+    setBoundaryProgress('');
+
+    if (result.unmatched.length > 0) {
+      setBoundaryError(`Matched ${result.matched}/${result.total} rows. Unmatched: ${result.unmatched.slice(0, 5).join(', ')}${result.unmatched.length > 5 ? '...' : ''}`);
+    } else {
+      setBoundaryError(null);
+    }
+
+    // Add boundary polygons as overlay (deduplicate to merge multi-part features)
+    const dedupedGeoJSON = deduplicateFeatures(geojson, geoJoinField);
+    const nameCol = getFieldNames(dedupedGeoJSON).find(f => /^(name|label|ntaname|neighborhood)/i.test(f)) || geoJoinField;
+    const newLayer: GeoLayer = {
+      id: `boundary-${++geoLayerCounter}`,
+      data: { name: 'Boundaries', geojson: dedupedGeoJSON, columns: getFieldNames(dedupedGeoJSON) },
+      fillColor: '#4a90d9',
+      fillOpacity: 0.15,
+      strokeColor: '#333',
+      strokeWidth: 1,
+      showLabels: false,
+      labelCol: nameCol,
+      colorByData: false,
+      geoJoinCol: geoJoinField,
+      csvJoinCol: csvCodeCol,
+      csvValueCol: null,
+      colorScale: 'sequential',
+      colorRamp: 'blues',
+      missingColor: '#e0e0e0',
+    };
+    setGeoLayers(prev => [...prev, newLayer]);
+    setExpandedGeoLayers(prev => new Set(prev).add(newLayer.id));
+  }, []);
+
+  const handleBuiltInBoundary = useCallback(async (type: BoundaryType, csvCodeCol: string) => {
+    setBoundaryLoading(true);
+    setBoundaryError(null);
+    try {
+      const geojson = await fetchBoundaryGeoJSON(type.fetchUrl, setBoundaryProgress, type.filterCountry);
+      const joinField = findJoinField(geojson, type.joinFields);
+      if (!joinField) {
+        setBoundaryError('Could not find matching field in boundary data. Try uploading the file manually.');
+        setBoundaryLoading(false);
+        return;
+      }
+      setBoundaryProgress('Joining...');
+      await handleBoundaryJoin(data.rows, data.columns, csvCodeCol, geojson, joinField);
+      if (map) {
+        const bounds = getBounds(geojson);
+        if (bounds) map.fitBounds(bounds as [number, number, number, number], { padding: 60, maxZoom: 12 });
+      }
+    } catch (err: any) {
+      setBoundaryError(err.message || 'Failed to fetch boundaries');
+      setBoundaryLoading(false);
+    }
+  }, [data.rows, data.columns, map, handleBoundaryJoin]);
+
+  const handleCustomBoundaryApply = useCallback(async () => {
+    if (!customBoundaryData || !customBoundaryJoinCol || !customCsvJoinCol) return;
+    setBoundaryLoading(true);
+    setBoundaryError(null);
+    setBoundaryProgress('Joining...');
+    await handleBoundaryJoin(data.rows, data.columns, customCsvJoinCol, customBoundaryData.geojson, customBoundaryJoinCol);
+    if (map) {
+      const bounds = getBounds(customBoundaryData.geojson);
+      if (bounds) map.fitBounds(bounds as [number, number, number, number], { padding: 60, maxZoom: 12 });
+    }
+    setShowCustomBoundary(false);
+    setCustomBoundaryData(null);
+  }, [customBoundaryData, customBoundaryJoinCol, customCsvJoinCol, data.rows, data.columns, map, handleBoundaryJoin]);
+
   const loadCSV = useCallback((text: string) => {
     const { rows, columns } = parseCSV(text);
     if (rows.length === 0) return;
@@ -180,6 +285,17 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     }));
     setGeocodeCol(columns[0] || '');
     setGeocodeContextCol('');
+
+    // Auto-detect boundary code columns
+    if (!detected.latCol && !detected.lngCol) {
+      const bd = detectBoundaryType(columns, rows);
+      setBoundaryDetection(bd);
+    } else {
+      setBoundaryDetection(null);
+    }
+    setBoundaryError(null);
+    setShowCustomBoundary(false);
+    setCustomBoundaryData(null);
   }, []);
 
   useEffect(() => {
@@ -906,48 +1022,196 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
         </div>
       )}
 
-      {/* Geocode prompt */}
-      {hasData && !hasCoords && !geocoding.active && data.columns.length > 0 && (
+      {/* Geocode / boundary prompt */}
+      {hasData && !hasCoords && !geocoding.active && !boundaryLoading && data.columns.length > 0 && (
         <div className="data-geocode-prompt">
-          <p>No coordinates found. Look up locations?</p>
-          <div className="data-col-row">
-            <span className="data-col-label">Find coordinates for</span>
-            <select
-              className="data-col-select"
-              value={geocodeCol}
-              onChange={e => setGeocodeCol(e.target.value)}
-            >
-              {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          {data.columns.length > 1 && (
-            <div className="data-col-row">
-              <span className="data-col-label">Use</span>
-              <select
-                className="data-col-select"
-                value={geocodeContextCol}
-                onChange={e => setGeocodeContextCol(e.target.value)}
+          <p>No coordinates found.</p>
+
+          {/* Auto-detected boundary codes */}
+          {boundaryDetection && (
+            <div className="data-boundary-section">
+              <p style={{ fontSize: 12, margin: '0 0 8px', color: '#457b9d', fontWeight: 600 }}>
+                Detected <strong>{boundaryDetection.column}</strong> — use {boundaryDetection.type.name}?
+              </p>
+              <p style={{ fontSize: 11, color: '#888', margin: '0 0 8px' }}>{boundaryDetection.type.description}</p>
+              <button
+                className="data-btn data-btn-primary"
+                style={{ width: '100%', marginBottom: 6 }}
+                onClick={() => handleBuiltInBoundary(boundaryDetection.type, boundaryDetection.column)}
               >
-                <option value="">None</option>
-                {data.columns.filter(c => c !== geocodeCol).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <span className="data-col-label">to help locate {geocodeCol}</span>
+                Use {boundaryDetection.type.name}
+              </button>
             </div>
           )}
-          <input
-            className="data-region-input"
-            type="text"
-            placeholder="Narrow search to, e.g. UK, Brazil..."
-            value={regionBias}
-            onChange={e => setRegionBias(e.target.value)}
-          />
-          <div className="data-btn-row">
-            <button
-              className="data-btn data-btn-primary"
-              onClick={() => handleGeocode(geocodeCol, data.rows, data.columns, regionBias, geocodeContextCol || undefined)}
-            >
-              Look up
-            </button>
+
+          {/* Other built-in boundary sets */}
+          {!boundaryDetection && (
+            <div className="data-boundary-section" style={{ marginBottom: 10 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 6px' }}>Match by boundary code</p>
+              <div className="data-col-row">
+                <span className="data-col-label">Code column</span>
+                <select
+                  className="data-col-select"
+                  value={geocodeCol}
+                  onChange={e => setGeocodeCol(e.target.value)}
+                >
+                  {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              {BOUNDARY_GROUPS.map(group => {
+                const items = BUILT_IN_BOUNDARIES.filter(bt => bt.group === group.key);
+                if (items.length === 0) return null;
+                return (
+                  <div key={group.key} style={{ marginTop: 8 }}>
+                    <p style={{ fontSize: 10, fontWeight: 600, color: '#999', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{group.label}</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {items.map(bt => (
+                        <button
+                          key={bt.id}
+                          className="data-btn"
+                          style={{ fontSize: 11, flex: '1 1 45%' }}
+                          onClick={() => handleBuiltInBoundary(bt, geocodeCol)}
+                          title={bt.description}
+                        >
+                          {bt.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Custom boundary upload */}
+          <div style={{ borderTop: '1px solid #e8e5de', paddingTop: 8, marginTop: 8 }}>
+            <input
+              ref={boundaryFileRef}
+              type="file"
+              accept=".geojson,.json,.zip,.shp,.gpx,.kml"
+              style={{ display: 'none' }}
+              onChange={async e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = '';
+                try {
+                  const result = await parseGeoFile(file);
+                  setCustomBoundaryData(result);
+                  setCustomBoundaryJoinCol(result.columns[0] || '');
+                  setCustomCsvJoinCol(data.columns[0] || '');
+                  setShowCustomBoundary(true);
+                } catch (err: any) {
+                  setBoundaryError(err.message || 'Failed to parse boundary file');
+                }
+              }}
+            />
+            {!showCustomBoundary ? (
+              <button
+                className="data-btn"
+                style={{ width: '100%', fontSize: 12 }}
+                onClick={() => boundaryFileRef.current?.click()}
+              >
+                Link custom boundaries...
+              </button>
+            ) : customBoundaryData && (
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 6px' }}>
+                  {customBoundaryData.name} ({customBoundaryData.geojson.features.length} features)
+                </p>
+                <div className="data-col-row">
+                  <span className="data-col-label">Boundary field</span>
+                  <select
+                    className="data-col-select"
+                    value={customBoundaryJoinCol}
+                    onChange={e => setCustomBoundaryJoinCol(e.target.value)}
+                  >
+                    {customBoundaryData.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="data-col-row">
+                  <span className="data-col-label">CSV column</span>
+                  <select
+                    className="data-col-select"
+                    value={customCsvJoinCol}
+                    onChange={e => setCustomCsvJoinCol(e.target.value)}
+                  >
+                    {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="data-btn-row" style={{ marginTop: 6 }}>
+                  <button
+                    className="data-btn data-btn-primary"
+                    onClick={handleCustomBoundaryApply}
+                  >
+                    Apply boundaries
+                  </button>
+                  <button
+                    className="data-btn"
+                    onClick={() => { setShowCustomBoundary(false); setCustomBoundaryData(null); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {boundaryError && (
+            <p style={{ fontSize: 11, color: '#e67e22', margin: '6px 0 0' }}>{boundaryError}</p>
+          )}
+
+          {/* Text geocoding fallback */}
+          <div style={{ borderTop: '1px solid #e8e5de', paddingTop: 8, marginTop: 10 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, margin: '0 0 6px' }}>Or look up by name</p>
+            <div className="data-col-row">
+              <span className="data-col-label">Find coordinates for</span>
+              <select
+                className="data-col-select"
+                value={geocodeCol}
+                onChange={e => setGeocodeCol(e.target.value)}
+              >
+                {data.columns.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            {data.columns.length > 1 && (
+              <div className="data-col-row">
+                <span className="data-col-label">Use</span>
+                <select
+                  className="data-col-select"
+                  value={geocodeContextCol}
+                  onChange={e => setGeocodeContextCol(e.target.value)}
+                >
+                  <option value="">None</option>
+                  {data.columns.filter(c => c !== geocodeCol).map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <span className="data-col-label">to help locate {geocodeCol}</span>
+              </div>
+            )}
+            <input
+              className="data-region-input"
+              type="text"
+              placeholder="Narrow search to, e.g. UK, Brazil..."
+              value={regionBias}
+              onChange={e => setRegionBias(e.target.value)}
+            />
+            <div className="data-btn-row">
+              <button
+                className="data-btn data-btn-primary"
+                onClick={() => handleGeocode(geocodeCol, data.rows, data.columns, regionBias, geocodeContextCol || undefined)}
+              >
+                Look up
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Boundary loading progress */}
+      {boundaryLoading && (
+        <div className="data-geocode-progress">
+          <p>{boundaryProgress || 'Loading boundaries...'}</p>
+          <div className="data-progress-bar">
+            <div className="data-progress-fill" style={{ width: '100%', animation: 'none', opacity: 0.5 }} />
           </div>
         </div>
       )}
