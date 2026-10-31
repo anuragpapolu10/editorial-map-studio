@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[112.3340835570001,16.837888717000055],[112.32283020000011,16.831583024000054],[112.33827972400002,16.831193925000036],[112.3340835570001,16.837888717000055]]]},"properties":{"shapeName":"Paracel Is","shapeID":"DIS015","shapeGroup":"125","shapeType":"DISP"}}
+]}

@@ -239,8 +239,9 @@ export function DataTools({ map, onHeatmapLegend }: DataToolsProps) {
     setBoundaryLoading(true);
     setBoundaryError(null);
     try {
-      const geojson = await fetchBoundaryGeoJSON(type.fetchUrl, setBoundaryProgress, type.filterCountry);
-      const joinField = findJoinField(geojson, type.joinFields);
+      const geojson = await fetchBoundaryGeoJSON(type.fetchUrl, setBoundaryProgress);
+      const csvValues = data.rows.map(r => r[csvCodeCol] ?? '').filter(Boolean);
+      const joinField = findJoinField(geojson, type.joinFields, csvValues);
       if (!joinField) {
         setBoundaryError('Could not find matching field in boundary data. Try uploading the file manually.');
         setBoundaryLoading(false);

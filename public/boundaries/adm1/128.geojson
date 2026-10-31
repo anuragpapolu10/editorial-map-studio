@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[114.33955383300008,11.44330597000004],[114.33499908400006,11.444527626000024],[114.3341369630001,11.437944412000036],[114.33955383300008,11.44330597000004]]]},"properties":{"shapeName":"Spratly Is","shapeID":"DIS018","shapeGroup":"128","shapeType":"DISP"}}
+]}

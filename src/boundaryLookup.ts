@@ -9,7 +9,7 @@ export interface BoundaryType {
   valuePattern?: RegExp;
   fetchUrl: string;
   joinFields: string[];
-  filterCountry?: string; // ISO-2 code to filter admin1 features by country
+  sampleValues?: string[];
 }
 
 // ── NYC Open Data boundaries ──────────────────────────────────────
@@ -100,85 +100,102 @@ const NYC_BOUNDARIES: BoundaryType[] = [
   },
 ];
 
-// ── Natural Earth URLs ────────────────────────────────────────────
-const NE_COUNTRIES_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
-const NE_ADMIN1_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson';
+// ── geoBoundaries (bundled in public/boundaries/) ────────────────
+// ADM0: /boundaries/adm0.geojson (all countries)
+// ADM1: /boundaries/adm1/{ISO3}.geojson (per-country)
+// Special: /boundaries/adm1/ITA-regions.geojson (Italy regioni = geoBoundaries ADM2)
+const GB_JOIN_FIELDS = ['shapeName', 'shapeID', 'shapeISO'];
 
-// ── World / national boundaries ───────────────────────────────────
 const WORLD_BOUNDARIES: BoundaryType[] = [
   {
     id: 'world-countries',
     name: 'World Countries',
-    description: 'Country boundaries (Natural Earth)',
+    description: 'Country boundaries (geoBoundaries)',
     group: 'world',
     columnPatterns: [
       /^(country|country[_\s-]?(name|code)|nation|iso[_\s-]?a[23]?|iso[_\s-]?code|country[_\s-]?iso)$/i,
     ],
-    fetchUrl: NE_COUNTRIES_URL,
-    joinFields: ['NAME', 'NAME_EN', 'ISO_A2', 'ISO_A3', 'ADMIN', 'ABBREV', 'POSTAL', 'ISO_A2_EH', 'ISO_A3_EH', 'FORMAL_EN'],
+    fetchUrl: '/boundaries/adm0.geojson',
+    joinFields: [...GB_JOIN_FIELDS, 'shapeGroup'],
   },
   {
     id: 'us-states',
     name: 'US States',
-    description: 'US state boundaries (Natural Earth)',
+    description: 'US state boundaries',
     group: 'us',
     columnPatterns: [
       /^(state|state[_\s-]?(name|code|abbr)|us[_\s-]?state|stusab|stusps)$/i,
     ],
-    fetchUrl: NE_ADMIN1_URL,
-    joinFields: ['name', 'postal', 'iso_3166_2', 'abbrev', 'fips', 'name_en', 'name_alt', 'woe_name', 'gn_name'],
-    filterCountry: 'US',
+    fetchUrl: '/boundaries/adm1/USA.geojson',
+    joinFields: GB_JOIN_FIELDS,
+    sampleValues: ['california', 'texas', 'new york', 'florida', 'illinois', 'pennsylvania', 'ohio', 'georgia', 'michigan', 'north carolina'],
   },
 ];
 
-// ── Per-country admin1 entries (states/provinces/prefectures) ─────
+// ── Per-country admin1 entries ───────────────────────────────────
 interface CountryAdmin1 {
   id: string;
   name: string;
   description: string;
-  iso: string;
+  iso3: string;
+  file?: string; // override filename if not {iso3}.geojson
   columnPatterns: RegExp[];
+  sampleValues?: string[];
 }
 
 const COUNTRY_ADMIN1: CountryAdmin1[] = [
-  { id: 'gb-regions', name: 'UK Regions', description: 'Counties, boroughs & districts', iso: 'GB',
-    columnPatterns: [/^(region|county|constituency|local[_\s-]?authority|council|borough|district)$/i] },
-  { id: 'de-states', name: 'Germany States', description: 'Bundesländer', iso: 'DE',
-    columnPatterns: [/^(bundesland|land|state|region|kreis)$/i] },
-  { id: 'fr-departments', name: 'France Departments', description: 'Départements & régions', iso: 'FR',
-    columnPatterns: [/^(d[ée]partement|region|r[ée]gion|department)$/i] },
-  { id: 'es-regions', name: 'Spain Regions', description: 'Comunidades autónomas & provincias', iso: 'ES',
-    columnPatterns: [/^(comunidad|provincia|region|autonomous[_\s-]?community)$/i] },
-  { id: 'br-states', name: 'Brazil States', description: 'Estados', iso: 'BR',
-    columnPatterns: [/^(estado|state|uf|sigla[_\s-]?uf)$/i] },
-  { id: 'it-provinces', name: 'Italy Provinces', description: 'Province & regioni', iso: 'IT',
-    columnPatterns: [/^(provincia|province|regione|region)$/i] },
-  { id: 'in-states', name: 'India States', description: 'States & union territories', iso: 'IN',
-    columnPatterns: [/^(state|state[_\s-]?name|ut|union[_\s-]?territory|pradesh)$/i] },
-  { id: 'jp-prefectures', name: 'Japan Prefectures', description: '都道府県', iso: 'JP',
-    columnPatterns: [/^(prefecture|ken|to|fu|do|todofuken|都道府県)$/i] },
-  { id: 'ph-provinces', name: 'Philippines Provinces', description: 'Provinces & regions', iso: 'PH',
-    columnPatterns: [/^(province|lalawigan|region)$/i] },
-  { id: 'au-states', name: 'Australia States', description: 'States & territories', iso: 'AU',
-    columnPatterns: [/^(state|territory|state[_\s-]?territory)$/i] },
-  { id: 'nz-regions', name: 'New Zealand Regions', description: 'Regional councils', iso: 'NZ',
-    columnPatterns: [/^(region|regional[_\s-]?council)$/i] },
-  { id: 'za-provinces', name: 'South Africa Provinces', description: 'Provinces', iso: 'ZA',
-    columnPatterns: [/^(province|provinsie)$/i] },
-  { id: 'ke-counties', name: 'Kenya Counties', description: 'Counties', iso: 'KE',
-    columnPatterns: [/^(county|kaunti)$/i] },
+  { id: 'gb-regions', name: 'UK Regions', description: 'Nations & counties', iso3: 'GBR',
+    columnPatterns: [/^(region|county|constituency|local[_\s-]?authority|council|borough|district)$/i],
+    sampleValues: ['england', 'scotland', 'wales', 'northern ireland', 'london', 'greater manchester', 'west midlands', 'kent', 'essex', 'surrey'] },
+  { id: 'de-states', name: 'Germany States', description: 'Bundesländer', iso3: 'DEU',
+    columnPatterns: [/^(bundesland|land|state|region|kreis)$/i],
+    sampleValues: ['bayern', 'bavaria', 'nordrhein-westfalen', 'baden-württemberg', 'hessen', 'sachsen', 'berlin', 'hamburg', 'niedersachsen'] },
+  { id: 'fr-regions', name: 'France Regions', description: 'Régions', iso3: 'FRA',
+    columnPatterns: [/^(d[ée]partement|r[ée]gion|department|region)$/i],
+    sampleValues: ['île-de-france', 'auvergne-rhône-alpes', 'normandie', 'bretagne', 'occitanie', 'nouvelle-aquitaine', 'bourgogne-franche-comté'] },
+  { id: 'es-regions', name: 'Spain Regions', description: 'Comunidades autónomas', iso3: 'ESP',
+    columnPatterns: [/^(comunidad|provincia|autonomous[_\s-]?community|region)$/i],
+    sampleValues: ['cataluña', 'andalucía', 'madrid', 'valencia', 'galicia', 'castilla y león', 'país vasco', 'canarias'] },
+  { id: 'br-states', name: 'Brazil States', description: 'Estados', iso3: 'BRA',
+    columnPatterns: [/^(estado|state|uf|sigla[_\s-]?uf|region)$/i],
+    sampleValues: ['são paulo', 'rio de janeiro', 'minas gerais', 'bahia', 'paraná', 'rio grande do sul', 'pernambuco', 'roraima'] },
+  { id: 'it-regions', name: 'Italy Regions', description: 'Regioni', iso3: 'ITA', file: 'ITA-regions',
+    columnPatterns: [/^(provincia|province|regione|region)$/i],
+    sampleValues: ['lombardia', 'lazio', 'campania', 'veneto', 'sicilia', 'emilia-romagna', 'piemonte', 'puglia', 'toscana', 'calabria', 'sardegna', 'liguria'] },
+  { id: 'in-states', name: 'India States', description: 'States & union territories', iso3: 'IND',
+    columnPatterns: [/^(state|state[_\s-]?name|ut|union[_\s-]?territory|pradesh|region)$/i],
+    sampleValues: ['maharashtra', 'uttar pradesh', 'karnataka', 'tamil nadu', 'kerala', 'rajasthan', 'gujarat', 'west bengal'] },
+  { id: 'jp-prefectures', name: 'Japan Prefectures', description: '都道府県', iso3: 'JPN',
+    columnPatterns: [/^(prefecture|ken|to|fu|do|todofuken|都道府県)$/i],
+    sampleValues: ['tokyo', 'osaka', 'hokkaido', 'kyoto', 'kanagawa', 'aichi', 'fukuoka', 'hyogo'] },
+  { id: 'ph-provinces', name: 'Philippines Provinces', description: 'Provinces', iso3: 'PHL',
+    columnPatterns: [/^(province|lalawigan)$/i],
+    sampleValues: ['cebu', 'cavite', 'bulacan', 'laguna', 'pangasinan', 'batangas', 'rizal', 'nueva ecija'] },
+  { id: 'au-states', name: 'Australia States', description: 'States & territories', iso3: 'AUS',
+    columnPatterns: [/^(state|territory|state[_\s-]?territory)$/i],
+    sampleValues: ['new south wales', 'victoria', 'queensland', 'western australia', 'south australia', 'tasmania'] },
+  { id: 'nz-regions', name: 'New Zealand Regions', description: 'Regional councils', iso3: 'NZL',
+    columnPatterns: [/^(region|regional[_\s-]?council)$/i],
+    sampleValues: ['auckland', 'canterbury', 'wellington', 'waikato', 'bay of plenty', 'otago'] },
+  { id: 'za-provinces', name: 'South Africa Provinces', description: 'Provinces', iso3: 'ZAF',
+    columnPatterns: [/^(province|provinsie|region)$/i],
+    sampleValues: ['gauteng', 'kwazulu-natal', 'western cape', 'eastern cape', 'limpopo', 'mpumalanga'] },
+  { id: 'ke-counties', name: 'Kenya Counties', description: 'Counties', iso3: 'KEN',
+    columnPatterns: [/^(county|kaunti)$/i],
+    sampleValues: ['nairobi', 'mombasa', 'kiambu', 'nakuru', 'machakos', 'kajiado', 'kisumu'] },
 ];
 
 function countryAdmin1ToBoundary(ca: CountryAdmin1): BoundaryType {
+  const filename = ca.file || ca.iso3;
   return {
     id: ca.id,
     name: ca.name,
     description: ca.description,
     group: 'world',
     columnPatterns: ca.columnPatterns,
-    fetchUrl: NE_ADMIN1_URL,
-    joinFields: ['name', 'name_en', 'postal', 'abbrev', 'iso_3166_2', 'name_alt', 'woe_name', 'gn_name', 'gns_name', 'name_local'],
-    filterCountry: ca.iso,
+    fetchUrl: `/boundaries/adm1/${filename}.geojson`,
+    joinFields: GB_JOIN_FIELDS,
+    sampleValues: ca.sampleValues,
   };
 }
 
@@ -200,6 +217,8 @@ export function detectBoundaryType(
   columns: string[],
   rows: DataRow[],
 ): { type: BoundaryType; column: string } | null {
+  const candidates: { type: BoundaryType; column: string; score: number }[] = [];
+
   for (const bt of BUILT_IN_BOUNDARIES) {
     for (const col of columns) {
       const match = bt.columnPatterns.some(p => p.test(col));
@@ -213,19 +232,29 @@ export function detectBoundaryType(
         }
       }
 
-      return { type: bt, column: col };
+      let score = 0;
+      if (bt.sampleValues && rows.length > 0) {
+        const dataValues = rows.slice(0, 20).map(r => normalize(r[col] ?? '')).filter(Boolean);
+        const sampleSet = new Set(bt.sampleValues.map(v => normalize(v)));
+        for (const v of dataValues) {
+          if (sampleSet.has(v)) score++;
+        }
+      }
+
+      candidates.push({ type: bt, column: col, score });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return { type: candidates[0].type, column: candidates[0].column };
 }
 
 export async function fetchBoundaryGeoJSON(
   url: string,
   onProgress?: (msg: string) => void,
-  filterCountry?: string,
 ): Promise<GeoJSON.FeatureCollection> {
-  const cacheKey = filterCountry ? `${url}::${filterCountry}` : url;
-  if (boundaryCache.has(cacheKey)) return boundaryCache.get(cacheKey)!;
+  if (boundaryCache.has(url)) return boundaryCache.get(url)!;
 
   onProgress?.('Fetching boundaries...');
   const res = await fetch(url, {
@@ -233,41 +262,44 @@ export async function fetchBoundaryGeoJSON(
   });
   if (!res.ok) throw new Error(`Failed to fetch boundaries (${res.status})`);
   onProgress?.('Parsing...');
-  const data = await res.json();
-  let fc = data as GeoJSON.FeatureCollection;
+  const fc = await res.json() as GeoJSON.FeatureCollection;
 
-  if (filterCountry) {
-    fc = {
-      type: 'FeatureCollection',
-      features: fc.features.filter(f => {
-        const iso = f.properties?.iso_a2 ?? f.properties?.ISO_A2 ?? '';
-        return iso === filterCountry;
-      }),
-    };
-  }
-
-  boundaryCache.set(cacheKey, fc);
-  // Also cache the unfiltered version if we fetched the full file
-  if (filterCountry && !boundaryCache.has(url)) {
-    boundaryCache.set(url, data as GeoJSON.FeatureCollection);
-  }
+  boundaryCache.set(url, fc);
   return fc;
 }
 
 export function findJoinField(
   geojson: GeoJSON.FeatureCollection,
   candidates: string[],
+  csvValues?: string[],
 ): string | null {
   if (geojson.features.length === 0) return null;
   const props = geojson.features[0].properties ?? {};
   const keys = Object.keys(props);
   const keysLower = keys.map(k => k.toLowerCase());
 
+  const validFields: string[] = [];
   for (const c of candidates) {
     const idx = keysLower.indexOf(c.toLowerCase());
-    if (idx !== -1) return keys[idx];
+    if (idx !== -1) validFields.push(keys[idx]);
   }
-  return null;
+  if (validFields.length === 0) return null;
+  if (validFields.length === 1 || !csvValues || csvValues.length === 0) return validFields[0];
+
+  const normalizedCSV = csvValues.map(v => normalize(v));
+  let bestField = validFields[0];
+  let bestScore = -1;
+  for (const field of validFields) {
+    const geoValues = new Set(
+      geojson.features.map(f => normalize(String(f.properties?.[field] ?? '')))
+    );
+    let score = 0;
+    for (const v of normalizedCSV) {
+      if (geoValues.has(v) || (NAME_ALIASES[v] && geoValues.has(NAME_ALIASES[v]))) score++;
+    }
+    if (score > bestScore) { bestScore = score; bestField = field; }
+  }
+  return bestField;
 }
 
 export function getFieldNames(geojson: GeoJSON.FeatureCollection): string[] {
@@ -276,8 +308,6 @@ export function getFieldNames(geojson: GeoJSON.FeatureCollection): string[] {
 }
 
 function computeCentroid(geometry: GeoJSON.Geometry): [number, number] | null {
-  // Collect all outer rings, then use centroid of the largest one
-  // so island chains don't pull the point into the ocean
   const rings: number[][][] = [];
 
   function collect(g: GeoJSON.Geometry) {
@@ -300,7 +330,6 @@ function computeCentroid(geometry: GeoJSON.Geometry): [number, number] | null {
   collect(geometry);
   if (rings.length === 0) return null;
 
-  // Find the largest ring by area
   let bestRing = rings[0];
   let maxArea = -1;
   for (const ring of rings) {
@@ -337,7 +366,6 @@ export function deduplicateFeatures(
       merged.push(features[0]);
       continue;
     }
-    // Merge all polygons into one MultiPolygon, keep properties from the largest
     let best = features[0];
     let maxArea = -1;
     const allPolygons: number[][][][] = [];
@@ -397,6 +425,20 @@ function approxArea(geometry: GeoJSON.Geometry): number {
   return area;
 }
 
+const NAME_ALIASES: Record<string, string> = {
+  'sicilia': 'sicily', 'sicily': 'sicilia',
+  'puglia': 'apulia', 'apulia': 'puglia',
+  'sardinia': 'sardegna', 'sardegna': 'sardinia',
+  'tuscany': 'toscana', 'toscana': 'tuscany',
+  'piedmont': 'piemonte', 'piemonte': 'piedmont',
+  'lombardy': 'lombardia', 'lombardia': 'lombardy',
+  'bavaria': 'bayern', 'bayern': 'bavaria',
+  'north rhine-westphalia': 'nordrhein-westfalen',
+  'lower saxony': 'niedersachsen',
+  'brittany': 'bretagne', 'bretagne': 'brittany',
+  'corsica': 'corse', 'corse': 'corsica',
+};
+
 function normalize(s: string): string {
   return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
@@ -408,8 +450,6 @@ export function joinWithBoundaries(
   geojson: GeoJSON.FeatureCollection,
   geoJoinField: string,
 ): BoundaryJoinResult {
-  // Group features by normalized name, then pick the largest polygon per name
-  // so the centroid lands on the main landmass (not a small island)
   const featuresByCode = new Map<string, GeoJSON.Feature[]>();
   for (const feature of geojson.features) {
     const code = normalize(String(feature.properties?.[geoJoinField] ?? ''));
@@ -439,7 +479,11 @@ export function joinWithBoundaries(
 
   const newRows = rows.map(row => {
     const code = normalize(row[csvCodeCol] ?? '');
-    const centroid = centroidMap.get(code);
+    let centroid = centroidMap.get(code);
+    if (!centroid && code) {
+      const alias = NAME_ALIASES[code];
+      if (alias) centroid = centroidMap.get(alias);
+    }
     if (centroid) {
       matched++;
       return { ...row, [latCol]: String(centroid[1]), [lngCol]: String(centroid[0]) };

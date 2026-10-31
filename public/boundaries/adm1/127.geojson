@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[123.479858,25.750695],[123.46375300000011,25.748195],[123.457916,25.736528],[123.492363,25.740694001000065],[123.479858,25.750695]]]},"properties":{"shapeName":"Senkakus","shapeID":"DIS017","shapeGroup":"127","shapeType":"DISP"}}
+]}

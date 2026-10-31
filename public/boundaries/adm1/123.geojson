@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[131.87005963800004,37.237941911000064],[131.87091412900008,37.241306475000044],[131.86803021900005,37.239193132000025],[131.87005963800004,37.237941911000064]]]},"properties":{"shapeName":"Liancourt Rocks","shapeID":"DIS013","shapeGroup":"123","shapeType":"DISP"}}
+]}

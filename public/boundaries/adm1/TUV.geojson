@@ -1,0 +1,5 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[177.15872192400002,-7.249479126217834],[177.15957641600005,-7.252733279992518],[177.16325292183666,-7.250732612976614],[177.15872192400002,-7.249479126217834]]]},"properties":{"shapeName":"Nui","shapeID":"17741764B90379454256238","shapeGroup":"TUV","shapeType":"ADM1"}},
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[178.68439503275874,-7.478460687706268],[178.6899414070001,-7.492083549999961],[178.69395671103948,-7.492636721342426],[178.6954553,-7.4838155],[178.68439503275874,-7.478460687706268]]]},"properties":{"shapeName":"Vaitupu","shapeID":"17741764B83632895409465","shapeGroup":"TUV","shapeType":"ADM1"}},
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[178.3760048036861,-8.073549141269275],[178.3770715124826,-8.06103361987378],[178.3724595,-8.0640749],[178.3760048036861,-8.073549141269275]]]},"properties":{"shapeName":"Nukufetau","shapeID":"17741764B30576374901893","shapeGroup":"TUV","shapeType":"ADM1"}}
+]}
