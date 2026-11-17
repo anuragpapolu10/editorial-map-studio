@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 import { LayerToggles } from './LayerToggles';
 import { SearchBar } from './SearchBar';
