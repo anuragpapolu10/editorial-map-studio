@@ -482,7 +482,7 @@ export function ArrowTools({ map, store, activeTool, setActiveTool }: ArrowTools
       <button
         className={`tool-btn ${active ? 'tool-btn-active' : ''}`}
         onClick={() => {
-          if (active) { setSelectedId(null); setActiveTool(null); }
+          if (active) { setSelectedId(null); setActiveTool('select'); }
           else setActiveTool('arrow');
         }}
         title="Arrow tool — click and drag to draw arrows"

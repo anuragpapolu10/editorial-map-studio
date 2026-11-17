@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import { LayerToggles } from './LayerToggles';
 import { SearchBar } from './SearchBar';
@@ -13,11 +13,12 @@ import { AnnotationStore } from '../annotations';
 import { ShapeStore } from '../shapes';
 import { MarkerStore } from '../markers';
 import { ArrowStore } from '../arrows';
+import { hitTestAllTools, setPending } from '../crossSelect';
 import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
 import type { HeatmapLegendInfo } from '../dataStore';
 
-export type ActiveTool = null | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'brush';
+export type ActiveTool = null | 'select' | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'brush';
 
 type SidebarTab = 'drawing' | 'data';
 
@@ -37,8 +38,48 @@ interface SidebarProps {
 }
 
 export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowStore, overlay, setOverlay, legendEntries, setLegendEntries, aspectRatio, setAspectRatio, onHeatmapLegend }: SidebarProps) {
-  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [tab, setTab] = useState<SidebarTab>('drawing');
+
+  // Select tool: click any element to switch to its tool
+  useEffect(() => {
+    if (!map || activeTool !== 'select') return;
+    const canvas = map.getCanvasContainer();
+    canvas.style.cursor = '';
+
+    const container = map.getContainer();
+    let tip = container.querySelector('.map-tooltip') as HTMLDivElement | null;
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.className = 'map-tooltip';
+      container.appendChild(tip);
+    }
+    tip.textContent = 'Click any element to select it';
+    tip.style.display = 'block';
+
+    const onMove = (e: maplibregl.MapMouseEvent) => {
+      const hit = hitTestAllTools(map, e.point);
+      canvas.style.cursor = hit ? 'pointer' : '';
+      if (tip) {
+        tip.textContent = hit ? 'Click to select' : 'Click any element to select it';
+      }
+    };
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      const hit = hitTestAllTools(map, e.point);
+      if (hit) {
+        setPending(hit.tool, hit.id);
+        setActiveTool(hit.tool);
+      }
+    };
+    map.on('mousemove', onMove);
+    map.on('click', onClick);
+    return () => {
+      map.off('mousemove', onMove);
+      map.off('click', onClick);
+      canvas.style.cursor = '';
+      if (tip) tip.style.display = 'none';
+    };
+  }, [map, activeTool]);
 
   return (
     <div className="sidebar">
@@ -76,6 +117,16 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
         <div className="sidebar-section">
           <h2>Drawing Tools</h2>
           <div className="tools-grid">
+            <button
+              className={`tool-btn ${activeTool === 'select' ? 'tool-btn-active' : ''}`}
+              onClick={() => setActiveTool(activeTool === 'select' ? null : 'select')}
+              title="Select tool — click on any element to select it"
+            >
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor">
+                <path d="M5 2l10 8-5 1.5L7.5 17z"/>
+              </svg>
+              <span>Select</span>
+            </button>
             <DrawingTools
               map={map}
               store={annotationStore}

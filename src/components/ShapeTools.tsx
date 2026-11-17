@@ -1331,7 +1331,7 @@ export function ShapeTools({ map, store, activeTool, setActiveTool }: ShapeTools
           className={`tool-btn ${activeTool === tool.id ? 'tool-btn-active' : ''}`}
           onClick={() => {
             if (activeTool === tool.id) {
-              setActiveTool(null);
+              setActiveTool('select');
             } else {
               lineVerticesRef.current = [];
               drawStartRef.current = null;

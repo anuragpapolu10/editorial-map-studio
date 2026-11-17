@@ -359,7 +359,7 @@ export function MarkerTools({ map, store, activeTool, setActiveTool }: MarkerToo
         onClick={() => {
           if (active) {
             setSelectedId(null);
-            setActiveTool(null);
+            setActiveTool('select');
           } else {
             setActiveTool('marker');
           }

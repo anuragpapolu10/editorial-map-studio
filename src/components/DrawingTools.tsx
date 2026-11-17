@@ -442,7 +442,7 @@ export function DrawingTools({ map, store, activeTool, setActiveTool }: DrawingT
     if (active) {
       setSelectedId(null);
       setEditingId(null);
-      setActiveTool(null);
+      setActiveTool('select');
     } else {
       setActiveTool('text');
     }
