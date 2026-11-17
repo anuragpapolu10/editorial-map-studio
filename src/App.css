@@ -1346,6 +1346,23 @@ html, body, #root {
   line-height: 1.4;
 }
 
+.select-marquee {
+  position: absolute;
+  border: 1.5px dashed #4a90d9;
+  background: rgba(74, 144, 217, 0.08);
+  pointer-events: none;
+  z-index: 6;
+}
+
+.select-highlight {
+  position: absolute;
+  border: 2px solid #4a90d9;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 4;
+  box-shadow: 0 0 0 1px rgba(74, 144, 217, 0.3);
+}
+
 /* Sidebar Tab Bar */
 .sidebar-tab-bar {
   display: flex;

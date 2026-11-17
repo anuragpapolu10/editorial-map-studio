@@ -83,3 +83,45 @@ export function hitTestAllTools(
 
   return null;
 }
+
+/** Hit test all tool layers within a screen-space bounding box, returning all hits */
+export function hitTestAllToolsInBox(
+  map: maplibregl.Map,
+  bbox: [maplibregl.PointLike, maplibregl.PointLike],
+): { tool: ActiveTool; id: string }[] {
+  const results: { tool: ActiveTool; id: string }[] = [];
+  const seen = new Set<string>();
+
+  const annLayers = ANNOTATION_LAYER_IDS.filter((id) => map.getLayer(id));
+  if (annLayers.length > 0) {
+    for (const f of map.queryRenderedFeatures(bbox, { layers: annLayers })) {
+      const id = f.properties?.id;
+      if (id && !seen.has(id)) { seen.add(id); results.push({ tool: 'text', id }); }
+    }
+  }
+
+  if (map.getLayer(MARKER_LAYER_ID)) {
+    for (const f of map.queryRenderedFeatures(bbox, { layers: [MARKER_LAYER_ID] })) {
+      const id = f.properties?.id;
+      if (id && !seen.has(id)) { seen.add(id); results.push({ tool: 'marker', id }); }
+    }
+  }
+
+  const arrowLayers = ARROW_SHAFT_LAYER_IDS.filter((id) => map.getLayer(id));
+  if (arrowLayers.length > 0) {
+    for (const f of map.queryRenderedFeatures(bbox, { layers: arrowLayers })) {
+      const id = f.properties?.id;
+      if (id && !seen.has(id)) { seen.add(id); results.push({ tool: 'arrow', id }); }
+    }
+  }
+
+  const shapeLayers = SHAPE_LAYER_IDS.filter((id) => map.getLayer(id));
+  if (shapeLayers.length > 0) {
+    for (const f of map.queryRenderedFeatures(bbox, { layers: shapeLayers })) {
+      const id = f.properties?.id;
+      if (id && !seen.has(id)) { seen.add(id); results.push({ tool: 'rectangle', id }); }
+    }
+  }
+
+  return results;
+}
