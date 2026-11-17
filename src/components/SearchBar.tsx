@@ -129,7 +129,7 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
     }
   }, []);
 
-  const fetchBoundary = useCallback(async (osmType: string, osmId: number): Promise<GeoJSON.Geometry | null> => {
+  const fetchOsmGeometry = useCallback(async (osmType: string, osmId: number): Promise<GeoJSON.Geometry | null> => {
     const typeMap: Record<string, string> = { R: 'R', W: 'W', N: 'N' };
     const t = typeMap[osmType];
     if (!t) return null;
@@ -144,6 +144,22 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
     } catch { /* ignore */ }
     return null;
   }, []);
+
+  const fetchRiverGeometry = useCallback(async (name: string, osmType: string, osmId: number): Promise<GeoJSON.Geometry | null> => {
+    if (osmType === 'R') return fetchOsmGeometry('R', osmId);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name + ' river')}&format=json&limit=10`,
+        { headers: { 'User-Agent': 'EditorialMapStudio/1.0' } }
+      );
+      const results = await res.json();
+      const relation = results.find((r: { osm_type: string; class: string; type: string }) =>
+        r.osm_type === 'relation' && r.class === 'waterway' && r.type === 'river'
+      );
+      if (relation) return fetchOsmGeometry('R', relation.osm_id);
+    } catch { /* ignore */ }
+    return fetchOsmGeometry(osmType, osmId);
+  }, [fetchOsmGeometry]);
 
   const addBoundaryShape = useCallback((geometry: GeoJSON.Geometry) => {
     const rings: [number, number][][] = [];
@@ -229,8 +245,12 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
     const osmType = feature.properties.osm_type;
     const osmId = feature.properties.osm_id;
     const isWaterway = feature.properties.osm_key === 'waterway';
+    const featureName = feature.properties.name || '';
     if (osmType && osmId) {
-      fetchBoundary(osmType, osmId).then((geom) => {
+      const geomPromise = isWaterway
+        ? fetchRiverGeometry(featureName, osmType, osmId)
+        : fetchOsmGeometry(osmType, osmId);
+      geomPromise.then((geom) => {
         if (geom && pinRef.current) {
           const btn = document.createElement('button');
           btn.className = 'search-pin-boundary';
@@ -245,7 +265,7 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
         }
       });
     }
-  }, [map, clearPin, fetchBoundary, addBoundaryShape, addRiverShape]);
+  }, [map, clearPin, fetchOsmGeometry, fetchRiverGeometry, addBoundaryShape, addRiverShape]);
 
   const flyTo = (feature: PhotonFeature) => {
     if (!map) return;
