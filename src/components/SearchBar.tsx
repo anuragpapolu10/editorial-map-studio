@@ -18,6 +18,7 @@ interface PhotonFeature {
   properties: {
     osm_type?: string;
     osm_id?: number;
+    osm_key?: string;
     name?: string;
     city?: string;
     state?: string;
@@ -139,7 +140,7 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
       );
       const data = await res.json();
       const geom = data?.geometry;
-      if (geom && (geom.type === 'Polygon' || geom.type === 'MultiPolygon')) return geom;
+      if (geom && (geom.type === 'Polygon' || geom.type === 'MultiPolygon' || geom.type === 'LineString' || geom.type === 'MultiLineString')) return geom;
     } catch { /* ignore */ }
     return null;
   }, []);
@@ -176,6 +177,38 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
     }
   }, [shapeStore, clearPin, setActiveTool]);
 
+  const addRiverShape = useCallback((geometry: GeoJSON.Geometry) => {
+    const lines: [number, number][][] = [];
+    if (geometry.type === 'LineString') {
+      lines.push(geometry.coordinates as [number, number][]);
+    } else if (geometry.type === 'MultiLineString') {
+      for (const line of geometry.coordinates) {
+        lines.push(line as [number, number][]);
+      }
+    }
+    let lastId = '';
+    for (const coords of lines) {
+      const shape: ShapeAnnotation = {
+        id: crypto.randomUUID(),
+        type: 'line',
+        vertices: coords,
+        rotation: 0,
+        stroke: '#2980b9',
+        strokeWidth: 2.5,
+        strokeStyle: 'solid',
+        fill: 'transparent',
+        fillOpacity: 0,
+      };
+      shapeStore.add(shape);
+      lastId = shape.id;
+    }
+    clearPin();
+    if (lastId) {
+      setPending('line', lastId);
+      setActiveTool('line');
+    }
+  }, [shapeStore, clearPin, setActiveTool]);
+
   const dropPin = useCallback((lng: number, lat: number, feature: PhotonFeature) => {
     if (!map) return;
     clearPin();
@@ -195,18 +228,24 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
 
     const osmType = feature.properties.osm_type;
     const osmId = feature.properties.osm_id;
+    const isWaterway = feature.properties.osm_key === 'waterway';
     if (osmType && osmId) {
       fetchBoundary(osmType, osmId).then((geom) => {
         if (geom && pinRef.current) {
           const btn = document.createElement('button');
           btn.className = 'search-pin-boundary';
-          btn.textContent = 'Add boundary';
-          btn.onclick = (e) => { e.stopPropagation(); addBoundaryShape(geom); };
+          if (isWaterway) {
+            btn.textContent = 'Add river';
+            btn.onclick = (e) => { e.stopPropagation(); addRiverShape(geom); };
+          } else {
+            btn.textContent = 'Add boundary';
+            btn.onclick = (e) => { e.stopPropagation(); addBoundaryShape(geom); };
+          }
           el.appendChild(btn);
         }
       });
     }
-  }, [map, clearPin, fetchBoundary, addBoundaryShape]);
+  }, [map, clearPin, fetchBoundary, addBoundaryShape, addRiverShape]);
 
   const flyTo = (feature: PhotonFeature) => {
     if (!map) return;
