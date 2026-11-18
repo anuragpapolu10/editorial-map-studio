@@ -9,19 +9,29 @@ import { ArrowTools } from './ArrowTools';
 import { ExportTools } from './ExportTools';
 import { LegendBuilder } from './LegendBuilder';
 import { DataTools } from './DataTools';
+import { ColorPickerPopover } from './ColorPickerPopover';
 import { AnnotationStore } from '../annotations';
 import { ShapeStore } from '../shapes';
 import { MarkerStore } from '../markers';
 import { ArrowStore } from '../arrows';
 import { hitTestAllTools, hitTestAllToolsInBox, setPending } from '../crossSelect';
+import type { StrokeStyle } from '../shapes';
 import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
 import type { HeatmapLegendInfo } from '../dataStore';
 
 export interface SelectionItem { tool: ActiveTool; id: string }
 
-
 export type ActiveTool = null | 'select' | 'text' | 'marker' | 'arrow' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'brush';
+
+const COLORS = [
+  { value: '#1a1a1a', label: 'Black' },
+  { value: '#8c8c8c', label: 'Grey' },
+  { value: '#ffffff', label: 'White' },
+  { value: '#c0392b', label: 'Red' },
+  { value: '#3a9a6b', label: 'Green' },
+  { value: '#3b7dd8', label: 'Blue' },
+];
 
 type SidebarTab = 'drawing' | 'data';
 
@@ -365,6 +375,274 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
               setActiveTool={setActiveTool}
             />
           </div>
+
+          {/* Bulk properties panel for select tool */}
+          {activeTool === 'select' && selection.length > 0 && (() => {
+            const hasText = selection.some(s => s.tool === 'text');
+            const hasMarker = selection.some(s => s.tool === 'marker');
+            const hasShape = selection.some(s => s.tool === 'rectangle' || s.tool === 'ellipse' || s.tool === 'line' || s.tool === 'pen' || s.tool === 'brush');
+            const hasArrow = selection.some(s => s.tool === 'arrow');
+            const hasStrokeable = hasShape || hasArrow;
+
+            const getCommonColor = (): string | null => {
+              let common: string | null = null;
+              for (const item of selection) {
+                let c: string | undefined;
+                if (item.tool === 'text') c = annotationStore.getAll().find(a => a.id === item.id)?.color;
+                else if (item.tool === 'marker') c = markerStore.getAll().find(m => m.id === item.id)?.color;
+                else if (item.tool === 'arrow') c = arrowStore.getAll().find(a => a.id === item.id)?.stroke;
+                else c = shapeStore.getAll().find(s => s.id === item.id)?.stroke;
+                if (!c) continue;
+                if (common === null) common = c;
+                else if (common !== c) return null;
+              }
+              return common;
+            };
+
+            const getCommonStrokeWidth = (): number | null => {
+              let common: number | null = null;
+              for (const item of selection) {
+                let w: number | undefined;
+                if (item.tool === 'arrow') w = arrowStore.getAll().find(a => a.id === item.id)?.strokeWidth;
+                else if (item.tool !== 'text' && item.tool !== 'marker') w = shapeStore.getAll().find(s => s.id === item.id)?.strokeWidth;
+                else continue;
+                if (w === undefined) continue;
+                if (common === null) common = w;
+                else if (common !== w) return null;
+              }
+              return common;
+            };
+
+            const getCommonStrokeStyle = (): StrokeStyle | null => {
+              let common: StrokeStyle | null = null;
+              for (const item of selection) {
+                let ss: StrokeStyle | undefined;
+                if (item.tool === 'arrow') ss = arrowStore.getAll().find(a => a.id === item.id)?.strokeStyle;
+                else if (item.tool !== 'text' && item.tool !== 'marker') ss = shapeStore.getAll().find(s => s.id === item.id)?.strokeStyle;
+                else continue;
+                if (!ss) continue;
+                if (common === null) common = ss;
+                else if (common !== ss) return null;
+              }
+              return common;
+            };
+
+            const getCommonFill = (): string | null => {
+              let common: string | null = null;
+              for (const item of selection) {
+                if (item.tool === 'text' || item.tool === 'marker' || item.tool === 'arrow') continue;
+                const s = shapeStore.getAll().find(s => s.id === item.id);
+                if (!s) continue;
+                if (common === null) common = s.fill;
+                else if (common !== s.fill) return null;
+              }
+              return common;
+            };
+
+            const getCommonFillOpacity = (): number | null => {
+              let common: number | null = null;
+              for (const item of selection) {
+                if (item.tool === 'text' || item.tool === 'marker' || item.tool === 'arrow') continue;
+                const s = shapeStore.getAll().find(s => s.id === item.id);
+                if (!s) continue;
+                if (common === null) common = s.fillOpacity;
+                else if (common !== s.fillOpacity) return null;
+              }
+              return common;
+            };
+
+            const applyColor = (color: string) => {
+              for (const item of selection) {
+                if (item.tool === 'text') annotationStore.update(item.id, { color });
+                else if (item.tool === 'marker') markerStore.update(item.id, { color });
+                else if (item.tool === 'arrow') arrowStore.update(item.id, { stroke: color });
+                else shapeStore.update(item.id, { stroke: color });
+              }
+            };
+
+            const applyStrokeWidth = (strokeWidth: number) => {
+              for (const item of selection) {
+                if (item.tool === 'arrow') arrowStore.update(item.id, { strokeWidth });
+                else if (item.tool !== 'text' && item.tool !== 'marker') shapeStore.update(item.id, { strokeWidth });
+              }
+            };
+
+            const applyStrokeStyle = (strokeStyle: StrokeStyle) => {
+              for (const item of selection) {
+                if (item.tool === 'arrow') arrowStore.update(item.id, { strokeStyle });
+                else if (item.tool !== 'text' && item.tool !== 'marker') shapeStore.update(item.id, { strokeStyle });
+              }
+            };
+
+            const applyFill = (fill: string) => {
+              for (const item of selection) {
+                if (item.tool !== 'text' && item.tool !== 'marker' && item.tool !== 'arrow') {
+                  shapeStore.update(item.id, { fill });
+                }
+              }
+            };
+
+            const applyFillOpacity = (fillOpacity: number) => {
+              for (const item of selection) {
+                if (item.tool !== 'text' && item.tool !== 'marker' && item.tool !== 'arrow') {
+                  shapeStore.update(item.id, { fillOpacity });
+                }
+              }
+            };
+
+            const commonColor = getCommonColor();
+            const commonStrokeWidth = getCommonStrokeWidth();
+            const commonStrokeStyle = getCommonStrokeStyle();
+            const commonFill = getCommonFill();
+            const commonFillOpacity = getCommonFillOpacity();
+
+            const typeCounts: string[] = [];
+            const textCount = selection.filter(s => s.tool === 'text').length;
+            const markerCount = selection.filter(s => s.tool === 'marker').length;
+            const arrowCount = selection.filter(s => s.tool === 'arrow').length;
+            const shapeCount = selection.filter(s => s.tool !== 'text' && s.tool !== 'marker' && s.tool !== 'arrow').length;
+            if (textCount) typeCounts.push(`${textCount} text`);
+            if (markerCount) typeCounts.push(`${markerCount} marker${markerCount > 1 ? 's' : ''}`);
+            if (arrowCount) typeCounts.push(`${arrowCount} arrow${arrowCount > 1 ? 's' : ''}`);
+            if (shapeCount) typeCounts.push(`${shapeCount} shape${shapeCount > 1 ? 's' : ''}`);
+
+            return (
+              <div className="text-style-controls" style={{ marginTop: 8 }}>
+                <div className="selection-bar">
+                  <span className="selection-text">
+                    {selection.length} selected ({typeCounts.join(', ')})
+                  </span>
+                  <div className="selection-actions">
+                    <button
+                      className="icon-btn icon-btn-danger"
+                      onClick={() => {
+                        for (const item of selection) {
+                          if (item.tool === 'text') annotationStore.remove(item.id);
+                          else if (item.tool === 'marker') markerStore.remove(item.id);
+                          else if (item.tool === 'arrow') arrowStore.remove(item.id);
+                          else shapeStore.remove(item.id);
+                        }
+                        setSelection([]);
+                      }}
+                      title="Delete selected (Del)"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+                        <path d="M5.5 5.5a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zM2 3h12v1H2V3zm3-1h6v1H5V2zm-2 3h10l-.7 9.1a1 1 0 01-1 .9H6.7a1 1 0 01-1-.9L5 5h-.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={() => setSelection([])}
+                      title="Clear selection (Esc)"
+                    >
+                      Deselect
+                    </button>
+                  </div>
+                </div>
+
+                {/* Color — applies to all types */}
+                <div className="style-row">
+                  <label className="style-label">{hasStrokeable && !hasText && !hasMarker ? 'Stroke' : 'Color'}</label>
+                  <div className="color-swatches">
+                    {COLORS.map((c) => (
+                      <button
+                        key={c.value}
+                        className={`color-swatch ${commonColor === c.value ? 'color-swatch-active' : ''}`}
+                        style={{ background: c.value, borderColor: c.value === '#ffffff' ? '#ccc' : c.value }}
+                        onClick={() => applyColor(c.value)}
+                        title={c.label}
+                      />
+                    ))}
+                    <ColorPickerPopover
+                      color={commonColor || '#1a1a1a'}
+                      onChange={applyColor}
+                      presetColors={COLORS}
+                    />
+                  </div>
+                </div>
+
+                {/* Stroke width — shapes and arrows only */}
+                {hasStrokeable && (
+                  <div className="style-row">
+                    <label className="style-label">Width</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="8"
+                      step="0.5"
+                      value={commonStrokeWidth ?? 2}
+                      onChange={(e) => applyStrokeWidth(Number(e.target.value))}
+                      className="style-slider"
+                    />
+                    <span className="style-value">{commonStrokeWidth != null ? `${commonStrokeWidth}px` : 'mixed'}</span>
+                  </div>
+                )}
+
+                {/* Stroke style — shapes and arrows only */}
+                {hasStrokeable && (
+                  <div className="style-row">
+                    <label className="style-label">Dash</label>
+                    <div className="stroke-style-toggle">
+                      {([
+                        { id: 'solid' as StrokeStyle, label: 'Solid', svg: '<line x1="2" y1="8" x2="30" y2="8" stroke="currentColor" stroke-width="2"/>' },
+                        { id: 'dashed' as StrokeStyle, label: 'Dashed', svg: '<line x1="2" y1="8" x2="30" y2="8" stroke="currentColor" stroke-width="2" stroke-dasharray="6,4"/>' },
+                        { id: 'dotted' as StrokeStyle, label: 'Dotted', svg: '<line x1="2" y1="8" x2="30" y2="8" stroke="currentColor" stroke-width="2" stroke-dasharray="2,4" stroke-linecap="round"/>' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.id}
+                          className={`stroke-style-btn ${commonStrokeStyle === opt.id ? 'stroke-style-btn-on' : ''}`}
+                          onClick={() => applyStrokeStyle(opt.id)}
+                          title={opt.label}
+                        >
+                          <svg viewBox="0 0 32 16" width="32" height="16" dangerouslySetInnerHTML={{ __html: opt.svg }} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Fill color — shapes only */}
+                {hasShape && (
+                  <div className="style-row">
+                    <label className="style-label">Fill</label>
+                    <div className="color-swatches">
+                      {COLORS.map((c) => (
+                        <button
+                          key={c.value}
+                          className={`color-swatch ${commonFill === c.value ? 'color-swatch-active' : ''}`}
+                          style={{ background: c.value, borderColor: c.value === '#ffffff' ? '#ccc' : c.value }}
+                          onClick={() => applyFill(c.value)}
+                          title={c.label}
+                        />
+                      ))}
+                      <ColorPickerPopover
+                        color={commonFill || '#4a90d9'}
+                        onChange={applyFill}
+                        presetColors={COLORS}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Fill opacity — shapes only */}
+                {hasShape && (
+                  <div className="style-row">
+                    <label className="style-label">Opacity</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={commonFillOpacity ?? 0.15}
+                      onChange={(e) => applyFillOpacity(Number(e.target.value))}
+                      className="style-slider"
+                    />
+                    <span className="style-value">{commonFillOpacity != null ? `${Math.round(commonFillOpacity * 100)}%` : 'mixed'}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="sidebar-section">

@@ -156,7 +156,7 @@ async function compositeOverlay(
   ctx.drawImage(img, 0, 0);
 
   const pad = 24 * dpr;
-  const lineGap = 6 * dpr;
+  const lineGap = 14 * dpr;
 
   // Measure text heights
   ctx.font = `700 ${ov.titleSize * dpr}px 'Playfair Display', Georgia, serif`;
@@ -227,7 +227,7 @@ function renderTitleOverlay(ov: OverlaySettings, width: number, height: number, 
   const ctx = canvas.getContext('2d')!;
 
   const pad = 24 * dpr;
-  const lineGap = 6 * dpr;
+  const lineGap = 14 * dpr;
 
   // Measure text
   ctx.font = `700 ${ov.titleSize * dpr}px 'Playfair Display', Georgia, serif`;
@@ -336,11 +336,12 @@ function drawCompass(
   canvasW: number,
   bearing: number,
   dpr = 1,
+  topOffset = 0,
 ) {
   const size = 40 * dpr;
-  const pad = 16 * dpr;
+  const pad = 24 * dpr;
   const cx = canvasW - pad - size / 2;
-  const cy = pad + size / 2;
+  const cy = topOffset + pad + size / 2;
 
   ctx.save();
   ctx.translate(cx, cy);
@@ -747,7 +748,7 @@ function buildSvgExport(
     const pad = 24 * dpr;
     const titleFontSize = overlay.titleSize * dpr;
     const subtitleFontSize = overlay.subtitleSize * dpr;
-    const lineGap = 6 * dpr;
+    const lineGap = 14 * dpr;
 
     // Estimate band height
     const titleH = overlay.title ? titleFontSize * 1.15 : 0;
@@ -797,9 +798,17 @@ function buildSvgExport(
   if (overlay.showCompass) {
     const bearing = map.getBearing();
     const compassSize = 40 * dpr;
-    const cPad = 16 * dpr;
+    const cPad = 24 * dpr;
+    let compassTop = 0;
+    if (overlay.title || overlay.subtitle) {
+      const tPad = 24 * dpr;
+      const tGap = 14 * dpr;
+      const tH = overlay.title ? overlay.titleSize * dpr * 1.15 : 0;
+      const sH = overlay.subtitle ? overlay.subtitleSize * dpr * 1.3 : 0;
+      compassTop = tPad + tH + (overlay.title && overlay.subtitle ? tGap : 0) + sH + tPad;
+    }
     const cx = w - cPad - compassSize / 2;
-    const cy = cPad + compassSize / 2;
+    const cy = compassTop + cPad + compassSize / 2;
     const labelSize = 11 * dpr;
 
     svgParts.push(`  <g id="compass" transform="rotate(${-bearing}, ${cx}, ${cy})">`);
@@ -1053,7 +1062,15 @@ export function ExportTools({ map, overlay, setOverlay, legendEntries, annotatio
       c.width = img.width; c.height = img.height;
       const cx = c.getContext('2d')!;
       cx.drawImage(img, 0, 0);
-      drawCompass(cx, c.width, map.getBearing(), dpr);
+      let compassTop = 0;
+      if (overlay.title || overlay.subtitle) {
+        const tPad = 24 * dpr;
+        const tGap = 14 * dpr;
+        const tH = overlay.title ? overlay.titleSize * dpr * 1.15 : 0;
+        const sH = overlay.subtitle ? overlay.subtitleSize * dpr * 1.3 : 0;
+        compassTop = tPad + tH + (overlay.title && overlay.subtitle ? tGap : 0) + sH + tPad;
+      }
+      drawCompass(cx, c.width, map.getBearing(), dpr, compassTop);
       dataUrl = c.toDataURL('image/jpeg', 0.92);
     }
     if (legendEntries.length > 0) {
