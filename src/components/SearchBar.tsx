@@ -244,7 +244,9 @@ export function SearchBar({ map, shapeStore, markerStore, setActiveTool }: Searc
 
     const osmType = feature.properties.osm_type;
     const osmId = feature.properties.osm_id;
-    const isWaterway = feature.properties.osm_key === 'waterway';
+    const osmValue = feature.properties.osm_value || '';
+    const isWaterway = feature.properties.osm_key === 'waterway'
+      && ['river', 'stream', 'canal', 'drain', 'ditch'].includes(osmValue);
     const featureName = feature.properties.name || '';
     if (osmType && osmId) {
       const geomPromise = isWaterway

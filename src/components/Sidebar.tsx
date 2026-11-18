@@ -55,6 +55,8 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [tab, setTab] = useState<SidebarTab>('drawing');
   const [selection, setSelection] = useState<SelectionItem[]>([]);
+  const [, bump] = useState(0);
+  const forceUpdate = () => bump(n => n + 1);
   const selectionRef = useRef<SelectionItem[]>([]);
   selectionRef.current = selection;
 
@@ -116,6 +118,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
     const onDomMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
       if (isSpaceHeld()) return;
+      map.dragPan.disable();
       const r = canvasRect();
       dragStart = { x: e.clientX - r.left, y: e.clientY - r.top };
       isDragging = false;
@@ -132,7 +135,6 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
       if (!isDragging && Math.sqrt(dx * dx + dy * dy) > DRAG_THRESHOLD) {
         isDragging = true;
         didDrag = true;
-        map.dragPan.disable();
         marqueeDiv = document.createElement('div');
         marqueeDiv.className = 'select-marquee';
         container.appendChild(marqueeDiv);
@@ -153,8 +155,8 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
     };
 
     const onDomMouseUp = (e: MouseEvent) => {
+      map.dragPan.enable();
       if (isDragging && dragStart) {
-        map.dragPan.enable();
         if (marqueeDiv) { marqueeDiv.remove(); marqueeDiv = null; }
         const r = canvasRect();
         const px = e.clientX - r.left;
@@ -467,6 +469,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
                 else if (item.tool === 'arrow') arrowStore.update(item.id, { stroke: color });
                 else shapeStore.update(item.id, { stroke: color });
               }
+              forceUpdate();
             };
 
             const applyStrokeWidth = (strokeWidth: number) => {
@@ -474,6 +477,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
                 if (item.tool === 'arrow') arrowStore.update(item.id, { strokeWidth });
                 else if (item.tool !== 'text' && item.tool !== 'marker') shapeStore.update(item.id, { strokeWidth });
               }
+              forceUpdate();
             };
 
             const applyStrokeStyle = (strokeStyle: StrokeStyle) => {
@@ -481,6 +485,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
                 if (item.tool === 'arrow') arrowStore.update(item.id, { strokeStyle });
                 else if (item.tool !== 'text' && item.tool !== 'marker') shapeStore.update(item.id, { strokeStyle });
               }
+              forceUpdate();
             };
 
             const applyFill = (fill: string) => {
@@ -489,6 +494,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
                   shapeStore.update(item.id, { fill });
                 }
               }
+              forceUpdate();
             };
 
             const applyFillOpacity = (fillOpacity: number) => {
@@ -497,6 +503,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
                   shapeStore.update(item.id, { fillOpacity });
                 }
               }
+              forceUpdate();
             };
 
             const commonColor = getCommonColor();
