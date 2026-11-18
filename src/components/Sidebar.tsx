@@ -84,6 +84,18 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
     return () => window.removeEventListener('keydown', onKey);
   }, [activeTool, annotationStore, shapeStore, markerStore, arrowStore]);
 
+  // V key shortcut to switch to select tool
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'v' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      setActiveTool('select');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setActiveTool]);
+
   // Select tool: click, shift+click, marquee drag
   useEffect(() => {
     if (!map || activeTool !== 'select') return;
