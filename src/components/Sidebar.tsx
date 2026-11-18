@@ -15,6 +15,7 @@ import { ShapeStore } from '../shapes';
 import { MarkerStore } from '../markers';
 import { ArrowStore } from '../arrows';
 import { hitTestAllTools, hitTestAllToolsInBox, setPending } from '../crossSelect';
+import { isSpaceHeld, subscribeSpace } from '../spacebar';
 import type { StrokeStyle } from '../shapes';
 import type { OverlaySettings, AspectRatio } from '../App';
 import type { LegendEntry } from '../legend';
@@ -114,6 +115,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
 
     const onDomMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      if (isSpaceHeld()) return;
       const r = canvasRect();
       dragStart = { x: e.clientX - r.left, y: e.clientY - r.top };
       isDragging = false;
@@ -179,6 +181,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
     };
 
     const onMove = (e: maplibregl.MapMouseEvent) => {
+      if (isSpaceHeld()) { canvas.style.cursor = 'grab'; return; }
       if (!isDragging && !dragStart) {
         const hit = hitTestAllTools(map, e.point);
         canvas.style.cursor = hit ? 'pointer' : 'crosshair';
@@ -186,6 +189,7 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
     };
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
+      if (isSpaceHeld()) return;
       if (didDrag) { didDrag = false; return; }
       const shift = (e.originalEvent as MouseEvent).shiftKey;
       const hit = hitTestAllTools(map, e.point);
@@ -205,12 +209,17 @@ export function Sidebar({ map, annotationStore, shapeStore, markerStore, arrowSt
       setTimeout(updateTip, 0);
     };
 
+    const unsubSpace = subscribeSpace((held) => {
+      canvas.style.cursor = held ? 'grab' : 'crosshair';
+    });
+
     canvas.addEventListener('mousedown', onDomMouseDown);
     window.addEventListener('mousemove', onDomMouseMove);
     window.addEventListener('mouseup', onDomMouseUp);
     map.on('mousemove', onMove);
     map.on('click', onClick);
     return () => {
+      unsubSpace();
       canvas.removeEventListener('mousedown', onDomMouseDown);
       window.removeEventListener('mousemove', onDomMouseMove);
       window.removeEventListener('mouseup', onDomMouseUp);
